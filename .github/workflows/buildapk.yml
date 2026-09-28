@@ -50,8 +50,10 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      # Accept Android SDK licenses on pre-installed SDK (avoids buggy setup-android action)
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
       # --- REQUIREMENT 2: Version Bump & Release Tag Detection ---
       - name: Detect Version Bump & Last Commit Message
@@ -150,13 +152,13 @@ jobs:
           sudo ln -sfn "$JAVA_HOME" /Library/Java/JavaVirtualMachines/openjdk-17.jdk/Contents/Home
 
           # 3. Create mock adb in platform-tools so step 5 in buildgradle.sh passes without physical phone
-          mkdir -p "$ANDROID_HOME/platform-tools"
-          tee "$ANDROID_HOME/platform-tools/adb" > /dev/null << 'EOF'
+          sudo mkdir -p "$ANDROID_HOME/platform-tools"
+          sudo tee "$ANDROID_HOME/platform-tools/adb" > /dev/null << 'EOF'
           #!/bin/sh
           echo "[CI Mock ADB] Ignoring: $@"
           exit 0
           EOF
-          chmod +x "$ANDROID_HOME/platform-tools/adb"
+          sudo chmod +x "$ANDROID_HOME/platform-tools/adb"
 
           # 4. REQUIREMENT 5: Cap Gradle memory in ~/.gradle/gradle.properties
           mkdir -p ~/.gradle
