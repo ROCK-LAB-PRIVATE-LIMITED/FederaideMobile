@@ -45,12 +45,13 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Node.js 20
+      # Use latest Node.js v24
+      - name: Setup Node.js (Latest v24)
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
-      # Accept Android SDK licenses on pre-installed SDK (avoids buggy setup-android action)
+      # Accept Android SDK licenses on pre-installed SDK
       - name: Accept Android SDK Licenses
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
@@ -123,13 +124,25 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-
 
-      # --- REQUIREMENT 4: Run npm audit fix --force ---
+      # --- REQUIREMENT 4: Run npm audit fix --force & Protect Framework Integrity ---
       - name: Install Node Modules & Run npm audit fix
         if: steps.version_check.outputs.should_build == 'true'
         working-directory: ${{ env.APP_DIR }}
         run: |
           npm install --legacy-peer-deps
+          # Run audit fix as required
           npm audit fix --force || true
+          
+          # Guardrail: If audit fix downgraded Expo/React to ancient versions, restore package.json so prebuild succeeds
+          CURRENT_EXPO=$(node -p "require('./package.json').dependencies.expo || ''")
+          if [[ "$CURRENT_EXPO" =~ ^4[0-9]\. ]]; then
+            echo "Warning: npm audit fix --force downgraded Expo to ancient version ($CURRENT_EXPO). Restoring Expo 57..."
+            git checkout package.json package-lock.json
+            npm install --legacy-peer-deps
+          fi
+          
+          # Ensure @expo/config-plugins is available
+          npm install --legacy-peer-deps @expo/config-plugins
 
       # --- Prepare Runner Environment for buildgradle.sh Compatibility ---
       - name: Prepare buildgradle.sh Environment Shims
