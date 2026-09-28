@@ -1,0 +1,78 @@
+{
+  "expo": {
+    "name": "FEDERaiDE",
+    "slug": "FederaideMobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/federate_circle.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true
+    },
+    "scheme": "federaide",
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/federate_circle.png",
+        "backgroundColor": "#060709"
+      },
+      "package": "in.rocklab.federaide",
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
+      "intentFilters": [
+        {
+          "action": "SEND",
+          "category": [
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "mimeType": "*/*"
+            }
+          ]
+        },
+        {
+          "action": "SEND_MULTIPLE",
+          "category": [
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "mimeType": "*/*"
+            }
+          ]
+        }
+      ]
+    },
+    "web": {
+      "favicon": "./assets/federate_circle.png"
+    },
+    "plugins": [
+      "./plugins/withCustomNetworkSecurity",
+      "./plugins/withTermuxNative",
+      "expo-notifications",
+      "expo-share-intent",
+      [
+        "expo-sharing",
+        {
+          "android": {
+            "enableShareIntent": true,
+            "singleShareMimeTypes": [
+              "*/*"
+            ],
+            "multipleShareMimeTypes": [
+              "*/*"
+            ]
+          }
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "bee946a3-5ae8-440a-9f61-e73eb793d170"
+      }
+    }
+  }
+}
