@@ -29,9 +29,10 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # Memory Guardrails: Restrict memory consumption to prevent Actions runner OOM
+      # Memory Guardrails: Restrict JVM & Node heap footprint to avoid runner OOM
       GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=512m -XX:+UseG1GC -Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=2"
-      NODE_OPTIONS: "--max-old-space-size=2048"
+      # Disable Node 24 experimental type-stripping so node_modules TypeScript files do not crash the CLI
+      NODE_OPTIONS: "--max-old-space-size=2048 --no-experimental-strip-types"
 
     steps:
       - name: Checkout Repository
@@ -45,7 +46,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # Use latest Node.js v24
+      # Setup latest Node.js v24
       - name: Setup Node.js (Latest v24)
         uses: actions/setup-node@v4
         with:
@@ -124,25 +125,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-
 
-      # --- REQUIREMENT 4: Run npm audit fix --force & Protect Framework Integrity ---
-      - name: Install Node Modules & Run npm audit fix
+      # --- Install Node Dependencies (Clean Install without destructive audit fix) ---
+      - name: Install Node Modules
         if: steps.version_check.outputs.should_build == 'true'
         working-directory: ${{ env.APP_DIR }}
         run: |
           npm install --legacy-peer-deps
-          # Run audit fix as required
-          npm audit fix --force || true
-          
-          # Guardrail: If audit fix downgraded Expo/React to ancient versions, restore package.json so prebuild succeeds
-          CURRENT_EXPO=$(node -p "require('./package.json').dependencies.expo || ''")
-          if [[ "$CURRENT_EXPO" =~ ^4[0-9]\. ]]; then
-            echo "Warning: npm audit fix --force downgraded Expo to ancient version ($CURRENT_EXPO). Restoring Expo 57..."
-            git checkout package.json package-lock.json
-            npm install --legacy-peer-deps
-          fi
-          
-          # Ensure @expo/config-plugins is available
-          npm install --legacy-peer-deps @expo/config-plugins
 
       # --- Prepare Runner Environment for buildgradle.sh Compatibility ---
       - name: Prepare buildgradle.sh Environment Shims
@@ -164,7 +152,7 @@ jobs:
           sudo mkdir -p /Library/Java/JavaVirtualMachines/openjdk-17.jdk/Contents
           sudo ln -sfn "$JAVA_HOME" /Library/Java/JavaVirtualMachines/openjdk-17.jdk/Contents/Home
 
-          # 3. Create mock adb in platform-tools so step 5 in buildgradle.sh passes without physical phone
+          # 3. Create mock adb in platform-tools so step 5 in buildgradle.sh passes without a physical phone
           sudo mkdir -p "$ANDROID_HOME/platform-tools"
           sudo tee "$ANDROID_HOME/platform-tools/adb" > /dev/null << 'EOF'
           #!/bin/sh
