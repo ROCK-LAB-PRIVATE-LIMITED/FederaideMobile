@@ -1,0 +1,202 @@
+name: Build & Release Android APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths-ignore:
+      - 'README.md'
+      - '.gitignore'
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force release even if tag exists (true/false)'
+        required: false
+        default: 'false'
+        type: boolean
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-build:
+    name: Build & Release APK
+    runs-on: ubuntu-latest
+
+    env:
+      # Memory Guardrails: Limit JVM & Node heap footprint to avoid runner OOM thrashing
+      GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=512m -XX:+UseG1GC -Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=2"
+      NODE_OPTIONS: "--max-old-space-size=2048"
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache-dependency-path: '**/package-lock.json'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # --- REQUIREMENT 2: Version Bump & Release Tag Detection ---
+      - name: Check Package Version vs Git Tags
+        id: version_check
+        run: |
+          # Detect workspace directory (root or FederaideMobile subfolder)
+          if [ -f "FederaideMobile/package.json" ]; then
+            APP_DIR="FederaideMobile"
+          else
+            APP_DIR="."
+          fi
+          echo "APP_DIR=$APP_DIR" >> $GITHUB_ENV
+
+          # Extract version from package.json
+          VERSION=$(node -p "require('./$APP_DIR/package.json').version")
+          TAG_NAME="v$VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
+
+          # Fetch all remote git tags
+          git fetch --tags --force
+
+          # Extract commit message from HEAD for release notes
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+          echo "$COMMIT_MSG" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+          # Check if tag already exists in the repository
+          TAG_EXISTS=false
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            TAG_EXISTS=true
+          fi
+
+          IS_MANUAL="${{ github.event_name == 'workflow_dispatch' }}"
+          FORCE_RELEASE="${{ inputs.force_release }}"
+
+          echo "Target tag: $TAG_NAME | Exists: $TAG_EXISTS | Manual: $IS_MANUAL"
+
+          if [ "$TAG_EXISTS" = "false" ] || [ "$IS_MANUAL" = "true" ] || [ "$FORCE_RELEASE" = "true" ]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            if [ "$TAG_EXISTS" = "false" ]; then
+              echo "create_tag=true" >> $GITHUB_OUTPUT
+            else
+              echo "create_tag=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "Version $TAG_NAME already released and no manual override supplied. Skipping build."
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          fi
+
+      # --- REQUIREMENT 3: Cache Android, Gradle, and NPM Build Assets ---
+      - name: Cache Gradle Dependencies & Wrapper
+        if: steps.version_check.outputs.should_build == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Cache NPM Dependencies
+        if: steps.version_check.outputs.should_build == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json', '**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      # --- REQUIREMENT 4: Run npm audit fix --force ---
+      - name: Install Node Modules & Run Audit Fix
+        if: steps.version_check.outputs.should_build == 'true'
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          npm install --legacy-peer-deps
+          # Run audit fix with force fallback to not block build on unfixable advisory warnings
+          npm audit fix --force || true
+
+      # --- REQUIREMENT 5: Memory-Optimized Clean Prebuild & APK Compilation ---
+      - name: Expo Prebuild (Android Clean)
+        if: steps.version_check.outputs.should_build == 'true'
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          rm -rf android
+          npx expo prebuild --platform android --clean
+
+      - name: Build Android Release APK
+        if: steps.version_check.outputs.should_build == 'true'
+        working-directory: ${{ env.APP_DIR }}/android
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod +x gradlew
+          # Assemble Release with explicit memory-conservative flags
+          ./gradlew assembleRelease \
+            --no-daemon \
+            --max-workers=2 \
+            --no-build-cache
+
+      - name: Verify & Locate APK
+        if: steps.version_check.outputs.should_build == 'true'
+        id: apk_location
+        run: |
+          APK_PATH=$(find ${{ env.APP_DIR }}/android/app/build/outputs/apk -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "Error: No APK found after build."
+            exit 1
+          fi
+          echo "Found APK at: $APK_PATH"
+          
+          # Rename to clean target name with version
+          RELEASE_APK_NAME="FEDERaiDE-v${{ steps.version_check.outputs.VERSION }}.apk"
+          cp "$APK_PATH" "./$RELEASE_APK_NAME"
+          echo "apk_path=./$RELEASE_APK_NAME" >> $GITHUB_OUTPUT
+
+      # --- Tag and Create/Update GitHub Release ---
+      - name: Create Git Tag
+        if: steps.version_check.outputs.should_build == 'true' && steps.version_check.outputs.create_tag == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version_check.outputs.TAG_NAME }}" -m "${{ env.RELEASE_NOTES }}"
+          git push origin "${{ steps.version_check.outputs.TAG_NAME }}"
+
+      - name: Publish GitHub Release
+        if: steps.version_check.outputs.should_build == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version_check.outputs.TAG_NAME }}"
+          APK_FILE="${{ steps.apk_location.outputs.apk_path }}"
+
+          echo "Publishing release $TAG with asset $APK_FILE..."
+
+          # Check if the release already exists (e.g. manual re-run)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Updating existing release..."
+            gh release upload "$TAG" "$APK_FILE" --clobber
+            gh release edit "$TAG" --notes "${{ env.RELEASE_NOTES }}"
+          else
+            echo "Creating new release..."
+            gh release create "$TAG" "$APK_FILE" \
+              --title "FEDERaiDE $TAG" \
+              --notes "${{ env.RELEASE_NOTES }}"
+          fi
