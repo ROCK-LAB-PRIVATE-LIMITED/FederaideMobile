@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       force_release:
-        description: 'Force release even if tag exists (true/false)'
+        description: 'Force build and upload release even if tag exists'
         required: false
         default: 'false'
         type: boolean
@@ -24,12 +24,12 @@ permissions:
   contents: write
 
 jobs:
-  check-and-build:
-    name: Build & Release APK
+  build-and-release:
+    name: Execute buildgradle.sh & Release
     runs-on: ubuntu-latest
 
     env:
-      # Memory Guardrails: Limit JVM & Node heap footprint to avoid runner OOM thrashing
+      # Memory Guardrails: Restrict memory consumption to prevent Actions runner OOM
       GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=512m -XX:+UseG1GC -Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=2"
       NODE_OPTIONS: "--max-old-space-size=2048"
 
@@ -49,16 +49,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache-dependency-path: '**/package-lock.json'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
       # --- REQUIREMENT 2: Version Bump & Release Tag Detection ---
-      - name: Check Package Version vs Git Tags
+      - name: Detect Version Bump & Last Commit Message
         id: version_check
         run: |
-          # Detect workspace directory (root or FederaideMobile subfolder)
           if [ -f "FederaideMobile/package.json" ]; then
             APP_DIR="FederaideMobile"
           else
@@ -66,22 +64,20 @@ jobs:
           fi
           echo "APP_DIR=$APP_DIR" >> $GITHUB_ENV
 
-          # Extract version from package.json
+          # Extract package.json version
           VERSION=$(node -p "require('./$APP_DIR/package.json').version")
           TAG_NAME="v$VERSION"
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
 
-          # Fetch all remote git tags
           git fetch --tags --force
 
-          # Extract commit message from HEAD for release notes
+          # Capture the exact last commit message for release notes
           COMMIT_MSG=$(git log -1 --pretty=%B)
           echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
           echo "$COMMIT_MSG" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-          # Check if tag already exists in the repository
           TAG_EXISTS=false
           if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
             TAG_EXISTS=true
@@ -90,7 +86,7 @@ jobs:
           IS_MANUAL="${{ github.event_name == 'workflow_dispatch' }}"
           FORCE_RELEASE="${{ inputs.force_release }}"
 
-          echo "Target tag: $TAG_NAME | Exists: $TAG_EXISTS | Manual: $IS_MANUAL"
+          echo "Target Tag: $TAG_NAME | Exists: $TAG_EXISTS | Manual Run: $IS_MANUAL"
 
           if [ "$TAG_EXISTS" = "false" ] || [ "$IS_MANUAL" = "true" ] || [ "$FORCE_RELEASE" = "true" ]; then
             echo "should_build=true" >> $GITHUB_OUTPUT
@@ -100,7 +96,7 @@ jobs:
               echo "create_tag=false" >> $GITHUB_OUTPUT
             fi
           else
-            echo "Version $TAG_NAME already released and no manual override supplied. Skipping build."
+            echo "Version $TAG_NAME already released. Skipping build."
             echo "should_build=false" >> $GITHUB_OUTPUT
           fi
 
@@ -116,7 +112,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Cache NPM Dependencies
+      - name: Cache NPM Cache
         if: steps.version_check.outputs.should_build == 'true'
         uses: actions/cache@v4
         with:
@@ -126,51 +122,75 @@ jobs:
             ${{ runner.os }}-npm-
 
       # --- REQUIREMENT 4: Run npm audit fix --force ---
-      - name: Install Node Modules & Run Audit Fix
+      - name: Install Node Modules & Run npm audit fix
         if: steps.version_check.outputs.should_build == 'true'
         working-directory: ${{ env.APP_DIR }}
         run: |
           npm install --legacy-peer-deps
-          # Run audit fix with force fallback to not block build on unfixable advisory warnings
           npm audit fix --force || true
 
-      # --- REQUIREMENT 5: Memory-Optimized Clean Prebuild & APK Compilation ---
-      - name: Expo Prebuild (Android Clean)
+      # --- Prepare Runner Environment for buildgradle.sh Compatibility ---
+      - name: Prepare buildgradle.sh Environment Shims
+        if: steps.version_check.outputs.should_build == 'true'
+        run: |
+          # 1. Symlink $ANDROID_HOME to $HOME/Library/Android/sdk as expected by buildgradle.sh
+          mkdir -p "$HOME/Library/Android"
+          ln -sfn "$ANDROID_HOME" "$HOME/Library/Android/sdk"
+
+          # 2. Create mock /usr/libexec/java_home so buildgradle.sh resolves JAVA_HOME on Linux
+          sudo mkdir -p /usr/libexec
+          sudo tee /usr/libexec/java_home > /dev/null << 'EOF'
+          #!/bin/sh
+          echo "$JAVA_HOME"
+          EOF
+          sudo chmod +x /usr/libexec/java_home
+
+          # Also symlink macOS fallback Java path
+          sudo mkdir -p /Library/Java/JavaVirtualMachines/openjdk-17.jdk/Contents
+          sudo ln -sfn "$JAVA_HOME" /Library/Java/JavaVirtualMachines/openjdk-17.jdk/Contents/Home
+
+          # 3. Create mock adb in platform-tools so step 5 in buildgradle.sh passes without physical phone
+          mkdir -p "$ANDROID_HOME/platform-tools"
+          tee "$ANDROID_HOME/platform-tools/adb" > /dev/null << 'EOF'
+          #!/bin/sh
+          echo "[CI Mock ADB] Ignoring: $@"
+          exit 0
+          EOF
+          chmod +x "$ANDROID_HOME/platform-tools/adb"
+
+          # 4. REQUIREMENT 5: Cap Gradle memory in ~/.gradle/gradle.properties
+          mkdir -p ~/.gradle
+          cat << 'EOF' >> ~/.gradle/gradle.properties
+          org.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=512m -XX:+UseG1GC
+          org.gradle.daemon=false
+          org.gradle.parallel=false
+          org.gradle.workers.max=2
+          EOF
+
+      # --- TRIGGER THE EXACT buildgradle.sh SCRIPT ---
+      - name: Trigger buildgradle.sh
         if: steps.version_check.outputs.should_build == 'true'
         working-directory: ${{ env.APP_DIR }}
         run: |
-          rm -rf android
-          npx expo prebuild --platform android --clean
+          chmod +x buildgradle.sh
+          ./buildgradle.sh
 
-      - name: Build Android Release APK
-        if: steps.version_check.outputs.should_build == 'true'
-        working-directory: ${{ env.APP_DIR }}/android
-        run: |
-          echo "sdk.dir=$ANDROID_HOME" > local.properties
-          chmod +x gradlew
-          # Assemble Release with explicit memory-conservative flags
-          ./gradlew assembleRelease \
-            --no-daemon \
-            --max-workers=2 \
-            --no-build-cache
-
-      - name: Verify & Locate APK
+      # --- Verify APK Output ---
+      - name: Locate Generated Release APK
         if: steps.version_check.outputs.should_build == 'true'
         id: apk_location
         run: |
-          APK_PATH=$(find ${{ env.APP_DIR }}/android/app/build/outputs/apk -name "*.apk" | head -n 1)
-          if [ -z "$APK_PATH" ]; then
-            echo "Error: No APK found after build."
+          APK_SOURCE="${{ env.APP_DIR }}/android/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK_SOURCE" ]; then
+            echo "Error: app-release.apk was not found at $APK_SOURCE"
             exit 1
           fi
-          echo "Found APK at: $APK_PATH"
-          
-          # Rename to clean target name with version
-          RELEASE_APK_NAME="FEDERaiDE-v${{ steps.version_check.outputs.VERSION }}.apk"
-          cp "$APK_PATH" "./$RELEASE_APK_NAME"
-          echo "apk_path=./$RELEASE_APK_NAME" >> $GITHUB_OUTPUT
 
-      # --- Tag and Create/Update GitHub Release ---
+          TARGET_APK="FEDERaiDE-v${{ steps.version_check.outputs.VERSION }}.apk"
+          cp "$APK_SOURCE" "./$TARGET_APK"
+          echo "apk_path=./$TARGET_APK" >> $GITHUB_OUTPUT
+
+      # --- Tag & Release ---
       - name: Create Git Tag
         if: steps.version_check.outputs.should_build == 'true' && steps.version_check.outputs.create_tag == 'true'
         run: |
@@ -187,15 +207,12 @@ jobs:
           TAG="${{ steps.version_check.outputs.TAG_NAME }}"
           APK_FILE="${{ steps.apk_location.outputs.apk_path }}"
 
-          echo "Publishing release $TAG with asset $APK_FILE..."
-
-          # Check if the release already exists (e.g. manual re-run)
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Updating existing release..."
+            echo "Updating existing release $TAG..."
             gh release upload "$TAG" "$APK_FILE" --clobber
             gh release edit "$TAG" --notes "${{ env.RELEASE_NOTES }}"
           else
-            echo "Creating new release..."
+            echo "Creating new release $TAG..."
             gh release create "$TAG" "$APK_FILE" \
               --title "FEDERaiDE $TAG" \
               --notes "${{ env.RELEASE_NOTES }}"
