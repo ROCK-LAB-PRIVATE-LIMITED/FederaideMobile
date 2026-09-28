@@ -1,2 +1,2 @@
 # FederaideMobile
-Android version of FEDERaiDE harness, using termux bootstrap.zip as the execution core.
+Android version of FEDERaiDE harness, running directly on your phone, with no cloud dependencies or subscriptions.
