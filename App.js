@@ -2956,8 +2956,8 @@ const COMPLETE_CLIENT_HTML = `
                 document.documentElement.animate(
                     {
                         clipPath: [
-                            `circle(0px at ${x}px ${y}px)`,
-                            `circle(${endRadius}px at ${x}px ${y}px)`
+                            \`circle(0px at \${x}px \${y}px)\`,
+                            \`circle(\${endRadius}px at \${x}px \${y}px)\`
                         ]
                     },
                     {
@@ -3014,16 +3014,16 @@ const COMPLETE_CLIENT_HTML = `
                 const isActive = !!t.is_active;
                 const item = document.createElement('div');
                 item.className = 'dropdown-agent-item ' + (isActive ? 'active' : '');
-                item.innerHTML = `
+                item.innerHTML = \`
                     <div style="display:flex; align-items:center; gap:8px; overflow:hidden; min-width:0;">
                         <span style="font-size:0.85rem; flex-shrink:0;">📁</span>
                         <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                            <div style="font-weight:${isActive ? '700' : '500'}; color:${isActive ? 'var(--brand-teal)' : 'var(--text-main)'}; font-size:0.82rem; text-overflow:ellipsis; overflow:hidden;">${window.electronAPI.escapeHtml(t.name)}</div>
-                            <div style="font-size:0.68rem; color:var(--text-dim); text-overflow:ellipsis; overflow:hidden;">${window.electronAPI.escapeHtml(t.path)}</div>
+                            <div style="font-weight:\${isActive ? '700' : '500'}; color:\${isActive ? 'var(--brand-teal)' : 'var(--text-main)'}; font-size:0.82rem; text-overflow:ellipsis; overflow:hidden;">\${window.electronAPI.escapeHtml(t.name)}</div>
+                            <div style="font-size:0.68rem; color:var(--text-dim); text-overflow:ellipsis; overflow:hidden;">\${window.electronAPI.escapeHtml(t.path)}</div>
                         </div>
                     </div>
-                    ${isActive ? '<span style="font-size:0.75rem; color:var(--brand-teal); font-weight:bold; flex-shrink:0; margin-left:6px;">✓</span>' : ''}
-                `;
+                    \${isActive ? '<span style="font-size:0.75rem; color:var(--brand-teal); font-weight:bold; flex-shrink:0; margin-left:6px;">✓</span>' : ''}
+                \`;
 
                 item.onclick = (e) => {
                     e.stopPropagation();
@@ -3092,7 +3092,7 @@ const COMPLETE_CLIENT_HTML = `
             renderTeamDropdown(searchInput ? searchInput.value : "");
 
             const titleEl = document.getElementById('team-form-title');
-            if (titleEl) titleEl.innerText = edit.path ? `Editing Team Workspace: ${edit.name}` : 'Create New Team Workspace';
+            if (titleEl) titleEl.innerText = edit.path ? \`Editing Team Workspace: \${edit.name}\` : 'Create New Team Workspace';
 
             document.getElementById('team-name-input').value = edit.name || '';
             document.getElementById('team-folder-input').value = edit.path || '';
@@ -3111,11 +3111,11 @@ const COMPLETE_CLIENT_HTML = `
 
             teams.forEach(t => {
                 const card = document.createElement('div');
-                card.style.cssText = `background: var(--bg-card); border: 1px solid ${t.is_active ? 'var(--brand-teal)' : 'var(--border-subtle)'}; border-radius: 10px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; box-shadow: ${t.is_active ? '0 0 14px rgba(61, 219, 217, 0.12)' : 'none'};`;
+                card.style.cssText = \`background: var(--bg-card); border: 1px solid \${t.is_active ? 'var(--brand-teal)' : 'var(--border-subtle)'}; border-radius: 10px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; box-shadow: \${t.is_active ? '0 0 14px rgba(61, 219, 217, 0.12)' : 'none'};\`;
 
                 const left = document.createElement('div');
                 left.style.cssText = 'flex: 1; overflow: hidden; min-width: 0;';
-                left.innerHTML = `<div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;"><span style="font-weight:700; font-size:0.88rem; color:${t.is_active ? 'var(--brand-teal)' : 'var(--text-main)'};">${window.electronAPI.escapeHtml(t.name)}</span>${t.is_active ? '<span style="font-size:0.68rem; padding:2px 7px; border-radius:10px; background:rgba(140,200,75,0.15); border:1px solid var(--brand-green); color:var(--brand-green); font-weight:700;">✓ Active</span>' : ''}</div><div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">📁 ${window.electronAPI.escapeHtml(t.path)}</div>${t.remote_url ? `<div style="font-size:0.7rem; color:var(--brand-yellow); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px;">🔗 ${window.electronAPI.escapeHtml(t.remote_url)}</div>` : ''}`;
+                left.innerHTML = \`<div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;"><span style="font-weight:700; font-size:0.88rem; color:\${t.is_active ? 'var(--brand-teal)' : 'var(--text-main)'};">\${window.electronAPI.escapeHtml(t.name)}</span>\${t.is_active ? '<span style="font-size:0.68rem; padding:2px 7px; border-radius:10px; background:rgba(140,200,75,0.15); border:1px solid var(--brand-green); color:var(--brand-green); font-weight:700;">✓ Active</span>' : ''}</div><div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">📁 \${window.electronAPI.escapeHtml(t.path)}</div>\${t.remote_url ? \`<div style="font-size:0.7rem; color:var(--brand-yellow); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px;">🔗 \${window.electronAPI.escapeHtml(t.remote_url)}</div>\` : ''}\`;
 
                 const right = document.createElement('div');
                 right.style.cssText = 'display:flex; gap:6px; align-items:center; flex-shrink:0;';
@@ -3149,7 +3149,7 @@ const COMPLETE_CLIENT_HTML = `
                 btnDel.innerText = '🗑️';
                 btnDel.onclick = () => {
                     pendingDeleteTeam = t;
-                    document.getElementById('team-del-prompt-text').innerText = `Are you sure you want to remove team "${t.name}" (${t.path})?`;
+                    document.getElementById('team-del-prompt-text').innerText = \`Are you sure you want to remove team "\${t.name}" (\${t.path})?\`;
                     document.getElementById('team-delete-modal').style.display = 'flex';
                 };
                 right.appendChild(btnDel);
@@ -3728,10 +3728,10 @@ const COMPLETE_CLIENT_HTML = `
 
                         const statusEl = document.getElementById('team-git-status-msg');
                         if (msg.status === 'success') {
-                            if (statusEl) statusEl.innerHTML = `<span style="color:var(--brand-green);">✓ Git ${msg.action}: ${window.electronAPI.escapeHtml(msg.message)}</span>`;
+                            if (statusEl) statusEl.innerHTML = \`<span style="color:var(--brand-green);">✓ Git \${msg.action}: \${window.electronAPI.escapeHtml(msg.message)}</span>\`;
                             appendLog('[bold green]✓ Git ' + msg.action + ': ' + msg.message + '[/bold green]', false);
                         } else {
-                            if (statusEl) statusEl.innerHTML = `<span style="color:var(--brand-red);">✗ Git ${msg.action} failed: ${window.electronAPI.escapeHtml(msg.error || 'Unknown error')}</span>`;
+                            if (statusEl) statusEl.innerHTML = \`<span style="color:var(--brand-red);">✗ Git \${msg.action} failed: \${window.electronAPI.escapeHtml(msg.error || 'Unknown error')}</span>\`;
                             appendLog('[bold red]✗ Git ' + msg.action + ' failed: ' + (msg.error || 'Unknown error') + '[/bold red]', false);
                         }
                         break;
@@ -3770,14 +3770,14 @@ const COMPLETE_CLIENT_HTML = `
                             if (tools.length === 0) {
                                 if (logEl) logEl.innerText = 'No tools returned. Check your JSON server commands, paths, and dependencies.';
                             } else {
-                                let out = `✓ Retrieved ${tools.length} active MCP tools:\n`;
-                                tools.forEach(t => { out += `\n✦ ${t.name}: ${t.description}`; });
+                                let out = \`✓ Retrieved \${tools.length} active MCP tools:\n\`;
+                                tools.forEach(t => { out += \`\n✦ \${t.name}: \${t.description}\`; });
                                 if (logEl) logEl.innerText = out;
                             }
                             sendToPython({ action: "get_agent_data" });
                         } else if (msg.status === "error") {
                             if (btnQuery) { btnQuery.disabled = false; btnQuery.innerText = 'Query / Refresh Tools'; }
-                            if (logEl) logEl.innerText = `✗ Query Failed: ${msg.error}`;
+                            if (logEl) logEl.innerText = \`✗ Query Failed: \${msg.error}\`;
                         }
                         break;
                     }
