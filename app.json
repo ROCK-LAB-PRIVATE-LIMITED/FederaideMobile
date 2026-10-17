@@ -2,7 +2,7 @@
   "expo": {
     "name": "FEDERaiDE",
     "slug": "FederaideMobile",
-    "version": "1.0.1",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/federate_circle.png",
     "userInterfaceStyle": "dark",
