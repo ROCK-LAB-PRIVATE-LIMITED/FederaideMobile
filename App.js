@@ -3198,7 +3198,7 @@ const COMPLETE_CLIENT_HTML = `
         };
 
         ['pull', 'push', 'sync'].forEach(act => {
-            const btn = document.getElementById(`btn-team-${act}`);
+            const btn = document.getElementById(\`btn-team-\${act}\`);
             if (btn) {
                 btn.onclick = () => {
                     btn.disabled = true;
