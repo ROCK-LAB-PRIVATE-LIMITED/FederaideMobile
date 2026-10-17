@@ -3254,7 +3254,7 @@ const COMPLETE_CLIENT_HTML = `
                 const jsonVal = (editor ? editor.value : "").trim();
                 const statusEl = document.getElementById('mcp-status-msg');
                 try { JSON.parse(jsonVal); } catch (e) {
-                    if (statusEl) statusEl.innerHTML = `<span style="color:var(--brand-red);">✗ Invalid JSON format: ${e.message}</span>`;
+                    if (statusEl) statusEl.innerHTML = \`<span style="color:var(--brand-red);">✗ Invalid JSON format: \${e.message}</span>\`;
                     return;
                 }
                 btnMcpSave.disabled = true;
