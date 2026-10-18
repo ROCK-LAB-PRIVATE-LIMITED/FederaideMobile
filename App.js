@@ -194,13 +194,35 @@ const COMPLETE_CLIENT_HTML = `
             display: flex;
         }
 
+        ::view-transition-image-pair(root) {
+            isolation: auto;
+        }
         ::view-transition-old(root),
         ::view-transition-new(root) {
             animation: none;
             mix-blend-mode: normal;
         }
-        ::view-transition-old(root) { z-index: 1; }
-        ::view-transition-new(root) { z-index: 9999; }
+        ::view-transition-old(root) {
+            z-index: 1;
+        }
+        ::view-transition-new(root) {
+            z-index: 9999;
+            animation: vt-circle-reveal 380ms ease-out;
+        }
+
+        @keyframes vt-circle-reveal {
+            from {
+                clip-path: circle(0px at var(--vt-x, 50%) var(--vt-y, 28px));
+            }
+            to {
+                clip-path: circle(var(--vt-r, 150vmax) at var(--vt-x, 50%) var(--vt-y, 28px));
+            }
+        }
+
+        @keyframes dropdown-pop {
+            from { opacity: 0; transform: scale(0.92) translateY(6px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
 
         /* --- SIDEBAR / DRAWER --- */
         #sidebar-overlay {
@@ -426,19 +448,21 @@ const COMPLETE_CLIENT_HTML = `
 
         #header-agent-dropdown, #team-dropdown {
             display: none;
-            position: fixed;
-            top: 54px;
-            left: 1rem;
-            width: 280px;
-            max-height: 380px;
+            position: absolute;
+            bottom: calc(100% + 8px);
+            right: 0;
+            width: 270px;
+            max-height: 320px;
             background: var(--bg-surface);
             border: 1.5px solid var(--border-focus);
             border-radius: 16px;
-            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.95);
+            box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.75);
             z-index: 2500;
             padding: 0.75rem;
             flex-direction: column;
             gap: 6px;
+            transform-origin: bottom right;
+            animation: dropdown-pop 0.16s ease-out;
         }
         #header-agent-dropdown.open, #team-dropdown.open { display: flex; }
         .dropdown-search-input {
@@ -2859,33 +2883,27 @@ const COMPLETE_CLIENT_HTML = `
             chatInput.focus();
         }
 
+        let lastKnownVh = 0;
         function updateViewportHeight() {
             if (window.visualViewport) {
                 const vh = window.visualViewport.height;
                 const offsetTop = window.visualViewport.offsetTop || 0;
-                const appMain = document.getElementById('app-main');
-                if (appMain) {
-                    appMain.style.height = vh + 'px';
-                    appMain.style.top = offsetTop + 'px';
+                if (Math.abs(vh - lastKnownVh) > 2) {
+                    lastKnownVh = vh;
+                    const appMain = document.getElementById('app-main');
+                    if (appMain) {
+                        appMain.style.height = vh + 'px';
+                        appMain.style.top = offsetTop + 'px';
+                    }
                 }
             }
-            if (window.scrollY !== 0 || window.scrollX !== 0) {
-                window.scrollTo(0, 0);
-            }
-            document.body.scrollTop = 0;
-            document.documentElement.scrollTop = 0;
         }
 
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', updateViewportHeight);
-            window.visualViewport.addEventListener('scroll', () => {
-                updateViewportHeight();
-            });
+        } else {
+            window.addEventListener('resize', updateViewportHeight);
         }
-        window.addEventListener('resize', updateViewportHeight);
-        window.addEventListener('scroll', () => {
-            updateViewportHeight();
-        });
 
         // Prevent root document bounce/pull from lifting the entry dock
         document.addEventListener('touchmove', (e) => {
@@ -2938,7 +2956,7 @@ const COMPLETE_CLIENT_HTML = `
             applyTheme(savedTheme);
         }
 
-        document.getElementById('btn-theme-toggle').onclick = (e) => {
+        document.getElementById('btn-theme-toggle').onclick = () => {
             const current = document.documentElement.getAttribute('data-theme') || 'dark';
             const nextTheme = current === 'dark' ? 'light' : 'dark';
 
@@ -2948,33 +2966,41 @@ const COMPLETE_CLIENT_HTML = `
             }
 
             const btn = document.getElementById('btn-theme-toggle');
-            const rect = btn.getBoundingClientRect();
-            const x = e.clientX || (rect.left + rect.width / 2);
-            const y = e.clientY || (rect.top + rect.height / 2);
-            const endRadius = Math.hypot(
+            const rect = btn ? btn.getBoundingClientRect() : null;
+            const x = rect ? Math.round(rect.left + rect.width / 2) : Math.round(window.innerWidth / 2);
+            const y = rect ? Math.round(rect.top + rect.height / 2) : 28;
+            const endRadius = Math.ceil(Math.hypot(
                 Math.max(x, window.innerWidth - x),
                 Math.max(y, window.innerHeight - y)
-            );
+            ));
+
+            document.documentElement.style.setProperty('--vt-x', x + 'px');
+            document.documentElement.style.setProperty('--vt-y', y + 'px');
+            document.documentElement.style.setProperty('--vt-r', endRadius + 'px');
 
             const transition = document.startViewTransition(() => {
                 applyTheme(nextTheme);
             });
 
-            transition.ready.then(() => {
-                document.documentElement.animate(
-                    {
-                        clipPath: [
-                            'circle(0px at ' + x + 'px ' + y + 'px)',
-                            'circle(' + endRadius + 'px at ' + x + 'px ' + y + 'px)'
-                        ]
-                    },
-                    {
-                        duration: 450,
-                        easing: 'ease-out',
-                        pseudoElement: '::view-transition-new(root)'
-                    }
-                );
-            });
+            if (transition && transition.ready) {
+                transition.ready.then(() => {
+                    try {
+                        document.documentElement.animate(
+                            {
+                                clipPath: [
+                                    'circle(0px at ' + x + 'px ' + y + 'px)',
+                                    'circle(' + endRadius + 'px at ' + x + 'px ' + y + 'px)'
+                                ]
+                            },
+                            {
+                                duration: 380,
+                                easing: 'ease-out',
+                                pseudoElement: '::view-transition-new(root)'
+                            }
+                        );
+                    } catch (e) {}
+                });
+            }
         };
 
         initTheme();
