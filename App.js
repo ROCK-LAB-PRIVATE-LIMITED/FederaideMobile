@@ -5232,13 +5232,13 @@ export default function App() {
           }
         }
 
-        // 3. Optional Core Update check via official update.sh script
+        // 3. Ensure Rust is installed and run the official core update script
         if (isMounted) setInitStatus('Checking for core library updates...');
-        addTermuxLog('[INIT] Running update.sh to fetch latest federaide package...');
+        addTermuxLog('[INIT] Installing/verifying Rust toolchain and running update.sh...');
         try {
           await TermuxNative.executeCommand(
             'bash',
-            ['-c', 'curl -LsSf https://raw.githubusercontent.com/ROCK-LAB-PRIVATE-LIMITED/federaide/main/update.sh | bash'],
+            ['-c', 'pkg install -y rust && export ANDROID_API_LEVEL=24 && curl -LsSf https://raw.githubusercontent.com/ROCK-LAB-PRIVATE-LIMITED/federaide/main/update.sh | bash'],
             ''
           );
         } catch (updateErr) {
