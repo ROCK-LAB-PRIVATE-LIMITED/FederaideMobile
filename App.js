@@ -194,36 +194,6 @@ const COMPLETE_CLIENT_HTML = `
             display: flex;
         }
 
-        ::view-transition-image-pair(root) {
-            isolation: auto;
-        }
-        ::view-transition-old(root),
-        ::view-transition-new(root) {
-            animation: none;
-            mix-blend-mode: normal;
-        }
-        ::view-transition-old(root) {
-            z-index: 1;
-        }
-        ::view-transition-new(root) {
-            z-index: 9999;
-            animation: vt-circle-reveal 380ms ease-out;
-        }
-
-        @keyframes vt-circle-reveal {
-            from {
-                clip-path: circle(0px at var(--vt-x, 50%) var(--vt-y, 28px));
-            }
-            to {
-                clip-path: circle(var(--vt-r, 150vmax) at var(--vt-x, 50%) var(--vt-y, 28px));
-            }
-        }
-
-        @keyframes dropdown-pop {
-            from { opacity: 0; transform: scale(0.92) translateY(6px); }
-            to { opacity: 1; transform: scale(1) translateY(0); }
-        }
-
         /* --- SIDEBAR / DRAWER --- */
         #sidebar-overlay {
             position: fixed;
@@ -415,17 +385,6 @@ const COMPLETE_CLIENT_HTML = `
             cursor: pointer;
         }
         .icon-btn svg { width: 20px; height: 20px; fill: currentColor; }
-        .icon-btn.btn-header-stop { padding: 0; transition: transform 0.2s ease, filter 0.2s ease; }
-        .icon-btn.btn-header-stop svg { width: 28px !important; height: 28px !important; fill: none; }
-        .icon-btn.btn-header-stop:hover { background: transparent; transform: scale(1.1); filter: drop-shadow(0 0 10px rgba(218, 96, 87, 0.65)); }
-        .icon-btn.btn-header-stop:active { transform: scale(0.95); }
-
-        #btn-header-new-chat { transition: all 0.25s ease; position: relative; }
-        #btn-header-new-chat.btn-chat-empty { border: 1.5px dashed var(--brand-teal); color: var(--brand-teal); background: rgba(61, 219, 217, 0.06); }
-        #btn-header-new-chat.btn-chat-empty:hover { background: rgba(61, 219, 217, 0.18); border-style: dashed; transform: scale(1.06); }
-        #btn-header-new-chat.btn-chat-nomem { border: 1.5px solid var(--brand-yellow) !important; color: var(--brand-yellow) !important; background: rgba(242, 168, 19, 0.15) !important; box-shadow: 0 0 10px rgba(242, 168, 19, 0.3); }
-        #btn-header-new-chat.btn-chat-nomem:hover { background: rgba(242, 168, 19, 0.28) !important; transform: scale(1.06); }
-        #status-nomem-badge { display: none; padding: 3px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 700; font-family: var(--font-mono); color: var(--brand-yellow); background: rgba(242, 168, 19, 0.12); border: 1px solid var(--brand-yellow); }
 
         .model-selector-pill {
             display: flex;
@@ -446,25 +405,23 @@ const COMPLETE_CLIENT_HTML = `
             background: var(--brand-teal);
         }
 
-        #header-agent-dropdown, #team-dropdown {
+        #header-agent-dropdown {
             display: none;
-            position: absolute;
-            bottom: calc(100% + 8px);
-            right: 0;
-            width: 270px;
-            max-height: 320px;
+            position: fixed;
+            top: 54px;
+            left: 1rem;
+            width: 280px;
+            max-height: 380px;
             background: var(--bg-surface);
             border: 1.5px solid var(--border-focus);
             border-radius: 16px;
-            box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.75);
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.95);
             z-index: 2500;
             padding: 0.75rem;
             flex-direction: column;
             gap: 6px;
-            transform-origin: bottom right;
-            animation: dropdown-pop 0.16s ease-out;
         }
-        #header-agent-dropdown.open, #team-dropdown.open { display: flex; }
+        #header-agent-dropdown.open { display: flex; }
         .dropdown-search-input {
             width: 100%;
             background: var(--bg-card);
@@ -848,18 +805,13 @@ const COMPLETE_CLIENT_HTML = `
         .input-capsule {
             background: var(--bg-surface);
             border: 1.5px solid var(--border-subtle);
-            border-radius: 20px;
-            padding: 0.75rem 0.9rem 0.65rem 0.9rem;
+            border-radius: 24px;
+            padding: 0.35rem 0.55rem;
             display: flex;
-            flex-direction: column;
+            align-items: center;
             gap: 8px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
         }
-
-        .input-text-row { width: 100%; display: flex; }
-        .input-controls-row { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 8px; }
-        .input-controls-left { display: flex; align-items: center; gap: 8px; }
-        .input-controls-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
         .attach-btn {
             position: relative;
@@ -1431,7 +1383,24 @@ const COMPLETE_CLIENT_HTML = `
                 <button class="icon-btn" id="btn-open-drawer" title="Menu">
                     <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
                 </button>
-                <button class="icon-btn btn-header-stop" id="btn-header-abort" title="Emergency Abort">
+                
+                <div class="model-selector-pill" id="btn-header-agent-pill">
+                    <span class="agent-dot" id="header-agent-dot"></span>
+                    <span id="header-agent-name">Rita</span>
+                    <span style="font-size: 0.7rem; color: var(--text-dim);">▾</span>
+                </div>
+            </div>
+
+            <div class="header-center">
+                <button class="icon-btn" id="btn-theme-toggle" title="Toggle Light / Dark Mode">
+                    <svg id="theme-moon-icon" viewBox="0 0 24 24" style="display: none;"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>
+                    <svg id="theme-sun-icon" viewBox="0 0 24 24"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 0 0 0-1.41.996.996 0 0 0-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 0 0 0-1.41.996.996 0 0 0-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg>
+                </button>
+            </div>
+
+            <div class="header-right">
+                <span id="status-mode" class="badge-pill mode-plan" title="Click to cycle security permissions">[SAFE]</span>
+                <button class="icon-btn" id="btn-abort" title="Abort">
                     <svg viewBox="0 0 100 100" style="width: 28px; height: 28px;">
                         <circle cx="50" cy="50" r="48" fill="var(--brand-red, #da6057)"/>
                         <defs>
@@ -1443,20 +1412,12 @@ const COMPLETE_CLIENT_HTML = `
                     </svg>
                 </button>
             </div>
-
-            <div class="header-center">
-                <button class="icon-btn" id="btn-theme-toggle" title="Toggle Light / Dark Mode">
-                    <svg id="theme-moon-icon" viewBox="0 0 24 24" style="display: none;"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>
-                    <svg id="theme-sun-icon" viewBox="0 0 24 24"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 0 0 0-1.41.996.996 0 0 0-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 0 0 0-1.41.996.996 0 0 0-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg>
-                </button>
-            </div>
-
-            <div class="header-right">
-                <button class="icon-btn" id="btn-header-new-chat" title="New Conversation">
-                    <svg viewBox="0 0 24 24"><path d="M21.99 6c0-1.1-.89-2-1.99-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4-.01-18zM17 13h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
-                </button>
-            </div>
         </header>
+
+        <div id="header-agent-dropdown">
+            <input type="text" id="header-agent-search" class="dropdown-search-input" placeholder="Search agents...">
+            <div id="dropdown-agents-list" class="dropdown-agents-list"></div>
+        </div>
 
         <!-- STREAMING CHAT AREA -->
         <div id="chat-container">
@@ -1487,50 +1448,14 @@ const COMPLETE_CLIENT_HTML = `
             <div id="pending-attachments-bar"></div>
 
             <div class="input-capsule" id="input-capsule-dropzone">
-                <div class="input-text-row">
-                    <textarea id="chat-input" rows="1" placeholder='Ask "what can you do?"' autofocus></textarea>
-                </div>
-                <div class="input-controls-row">
-                    <div class="input-controls-left">
-                        <label class="attach-btn" title="Attach file">
-                            +
-                            <input type="file" id="file-picker-input" class="hidden-file-input" multiple>
-                        </label>
-                    </div>
-                    <div class="input-controls-right">
-                        <div style="position: relative;">
-                            <div class="model-selector-pill" id="btn-team-pill" title="Switch Team Workspace">
-                                <span id="active-team-name">Default</span>
-                                <span style="font-size: 0.75rem; color: var(--text-dim);">▾</span>
-                            </div>
-                            <div id="team-dropdown">
-                                <input type="text" id="team-dropdown-search" class="dropdown-search-input" placeholder="Search teams...">
-                                <div id="dropdown-teams-list" class="dropdown-agents-list"></div>
-                                <button class="modal-btn btn-secondary" id="btn-dropdown-manage-teams" style="width: 100%; margin-top: 4px; padding: 6px 10px; font-size: 0.78rem;">Manage Teams</button>
-                            </div>
-                        </div>
-
-                        <div style="position: relative;">
-                            <div class="model-selector-pill" id="btn-header-agent-pill" title="Select agent">
-                                <span class="agent-dot" id="header-agent-dot"></span>
-                                <span id="header-agent-name">Rita</span>
-                                <span style="font-size: 0.75rem; color: var(--text-dim);">▾</span>
-                            </div>
-                            <div id="header-agent-dropdown">
-                                <input type="text" id="header-agent-search" class="dropdown-search-input" placeholder="Search agents...">
-                                <div id="dropdown-agents-list" class="dropdown-agents-list"></div>
-                                <button class="modal-btn btn-secondary" id="btn-dropdown-manage-agents" style="width: 100%; margin-top: 4px; padding: 6px 10px; font-size: 0.78rem;">Add Agent</button>
-                            </div>
-                        </div>
-
-                        <span id="status-nomem-badge">[NO MEMORY]</span>
-                        <span id="status-mode" class="badge-pill mode-plan" title="Click to cycle security permissions">[SAFE]</span>
-
-                        <button class="send-btn" id="btn-send" title="Send (Enter)">
-                            <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-                        </button>
-                    </div>
-                </div>
+                <label class="attach-btn" title="Attach file">
+                    +
+                    <input type="file" id="file-picker-input" class="hidden-file-input" multiple>
+                </label>
+                <textarea id="chat-input" rows="1" placeholder='Ask "what can you do?"' autofocus></textarea>
+                <button class="send-btn" id="btn-send" title="Send (Enter)">
+                    <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                </button>
             </div>
         </div>
     </main>
@@ -2579,8 +2504,6 @@ const COMPLETE_CLIENT_HTML = `
         let showAllSessions = false;
         let activeAIMessageBlock = null;
         let activeAIMessageBody = null;
-        let isChatEmpty = true;
-        let isNoMemorySession = false;
         let editingTeamPath = null;
         let pendingConflictPath = null;
         let pendingDeleteTeam = null;
@@ -2703,31 +2626,9 @@ const COMPLETE_CLIENT_HTML = `
             return text.replace(/\\[\\/\\]/g, "").replace(/\\[\\/?(bold|dim|italic|underline|\\#[a-fA-F0-9]{6}|[a-zA-Z]+)(?:\\s+[a-zA-Z0-9#_]+)?\\]/g, "");
         }
 
-        function updateNewChatButtonState() {
-            const btn = document.getElementById('btn-header-new-chat');
-            const nomemBadge = document.getElementById('status-nomem-badge');
-            if (!btn) return;
-
-            btn.classList.remove('btn-chat-empty', 'btn-chat-nomem');
-
-            if (nomemBadge) {
-                nomemBadge.style.display = isNoMemorySession ? 'inline-block' : 'none';
-            }
-
-            if (isChatEmpty) {
-                if (isNoMemorySession) {
-                    btn.classList.add('btn-chat-nomem');
-                } else {
-                    btn.classList.add('btn-chat-empty');
-                }
-            }
-        }
-
         function closeModals() {
             document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
-            if (headerAgentDropdown) headerAgentDropdown.classList.remove('open');
-            const teamDropdown = document.getElementById('team-dropdown');
-            if (teamDropdown) teamDropdown.classList.remove('open');
+            headerAgentDropdown.classList.remove('open');
             if (typeof resetScheduleForm === 'function') resetScheduleForm();
             chatInput.focus();
         }
@@ -2883,27 +2784,33 @@ const COMPLETE_CLIENT_HTML = `
             chatInput.focus();
         }
 
-        let lastKnownVh = 0;
         function updateViewportHeight() {
             if (window.visualViewport) {
                 const vh = window.visualViewport.height;
                 const offsetTop = window.visualViewport.offsetTop || 0;
-                if (Math.abs(vh - lastKnownVh) > 2) {
-                    lastKnownVh = vh;
-                    const appMain = document.getElementById('app-main');
-                    if (appMain) {
-                        appMain.style.height = vh + 'px';
-                        appMain.style.top = offsetTop + 'px';
-                    }
+                const appMain = document.getElementById('app-main');
+                if (appMain) {
+                    appMain.style.height = vh + 'px';
+                    appMain.style.top = offsetTop + 'px';
                 }
             }
+            if (window.scrollY !== 0 || window.scrollX !== 0) {
+                window.scrollTo(0, 0);
+            }
+            document.body.scrollTop = 0;
+            document.documentElement.scrollTop = 0;
         }
 
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', updateViewportHeight);
-        } else {
-            window.addEventListener('resize', updateViewportHeight);
+            window.visualViewport.addEventListener('scroll', () => {
+                updateViewportHeight();
+            });
         }
+        window.addEventListener('resize', updateViewportHeight);
+        window.addEventListener('scroll', () => {
+            updateViewportHeight();
+        });
 
         // Prevent root document bounce/pull from lifting the entry dock
         document.addEventListener('touchmove', (e) => {
@@ -2919,15 +2826,7 @@ const COMPLETE_CLIENT_HTML = `
 
         document.addEventListener('click', (e) => {
             if (!e.target.closest('#btn-header-agent-pill') && !e.target.closest('#header-agent-dropdown')) {
-                if (headerAgentDropdown) headerAgentDropdown.classList.remove('open');
-            }
-            if (!e.target.closest('#btn-team-pill') && !e.target.closest('#team-dropdown')) {
-                const teamDd = document.getElementById('team-dropdown');
-                if (teamDd) teamDd.classList.remove('open');
-            }
-            if (!e.target.closest('#btn-team-pill') && !e.target.closest('#team-dropdown')) {
-                const teamDd = document.getElementById('team-dropdown');
-                if (teamDd) teamDd.classList.remove('open');
+                headerAgentDropdown.classList.remove('open');
             }
             const link = e.target.closest('a');
             if (link && link.href) {
@@ -2960,151 +2859,20 @@ const COMPLETE_CLIENT_HTML = `
             applyTheme(savedTheme);
         }
 
-        document.getElementById('btn-theme-toggle').onclick = (e) => {
+        document.getElementById('btn-theme-toggle').onclick = () => {
             const current = document.documentElement.getAttribute('data-theme') || 'dark';
-            const nextTheme = current === 'dark' ? 'light' : 'dark';
-
-            if (!document.startViewTransition) {
-                applyTheme(nextTheme);
-                return;
-            }
-
-            const btn = document.getElementById('btn-theme-toggle');
-            const rect = btn ? btn.getBoundingClientRect() : null;
-            const x = rect ? Math.round(rect.left + rect.width / 2) : Math.round(window.innerWidth / 2);
-            const y = rect ? Math.round(rect.top + rect.height / 2) : 28;
-            const endRadius = Math.ceil(Math.hypot(
-                Math.max(x, window.innerWidth - x),
-                Math.max(y, window.innerHeight - y)
-            ));
-
-            document.documentElement.style.setProperty('--vt-x', x + 'px');
-            document.documentElement.style.setProperty('--vt-y', y + 'px');
-            document.documentElement.style.setProperty('--vt-r', endRadius + 'px');
-
-            const transition = document.startViewTransition(() => {
-                applyTheme(nextTheme);
-            });
-
-            if (transition && transition.ready) {
-                transition.ready.then(() => {
-                    try {
-                        document.documentElement.animate(
-                            {
-                                clipPath: [
-                                    'circle(0px at ' + x + 'px ' + y + 'px)',
-                                    'circle(' + endRadius + 'px at ' + x + 'px ' + y + 'px)'
-                                ]
-                            },
-                            {
-                                duration: 380,
-                                easing: 'ease-out',
-                                pseudoElement: '::view-transition-new(root)'
-                            }
-                        );
-                    } catch (e) {}
-                });
-            }
+            applyTheme(current === 'dark' ? 'light' : 'dark');
         };
 
         initTheme();
 
-        const btnHeaderAbort = document.getElementById('btn-header-abort');
-        if (btnHeaderAbort) {
-            btnHeaderAbort.onclick = () => {
-                sendToPython({ action: "abort" });
-                workingAgentsMap.clear();
-                workingIndicator.style.display = "none";
-                stopReactorAnimation();
-                appendLog("[bold red]Operation Aborted by User.[/bold red]", false);
-            };
-        }
-
-        const btnHeaderNewChat = document.getElementById('btn-header-new-chat');
-        if (btnHeaderNewChat) {
-            btnHeaderNewChat.onclick = () => {
-                if (isChatEmpty) {
-                    isNoMemorySession = !isNoMemorySession;
-                    sendToPython({ action: "clear_all", no_memory: isNoMemorySession });
-                    updateNewChatButtonState();
-                } else {
-                    isNoMemorySession = false;
-                    sendToPython({ action: "clear_all", no_memory: false });
-                    isChatEmpty = true;
-                    updateNewChatButtonState();
-                }
-            };
-        }
-
-        function renderTeamDropdown(filter) {
-            const listEl = document.getElementById('dropdown-teams-list');
-            if (!listEl) return;
-            listEl.innerHTML = '';
-            const q = (filter || '').toLowerCase().trim();
-            const filtered = (cachedTeams || []).filter(t => (t.name || '').toLowerCase().includes(q) || (t.path || '').toLowerCase().includes(q));
-
-            if (filtered.length === 0) {
-                listEl.innerHTML = '<div style="color:var(--text-dim); font-size:0.8rem; padding:8px; text-align:center;">No teams found</div>';
-                return;
-            }
-
-            filtered.forEach(t => {
-                const isActive = Boolean(t.is_active);
-                const item = document.createElement('div');
-                item.className = 'dropdown-agent-item ' + (isActive ? 'active' : '');
-                item.innerHTML = '<div style="display:flex; align-items:center; gap:8px; overflow:hidden; min-width:0;">' +
-                    '<span style="font-size:0.85rem; flex-shrink:0;">📁</span>' +
-                    '<div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' +
-                        '<div style="font-weight:' + (isActive ? '700' : '500') + '; color:' + (isActive ? 'var(--brand-teal)' : 'var(--text-main)') + '; font-size:0.82rem; text-overflow:ellipsis; overflow:hidden;">' + window.electronAPI.escapeHtml(t.name) + '</div>' +
-                        '<div style="font-size:0.68rem; color:var(--text-dim); text-overflow:ellipsis; overflow:hidden;">' + window.electronAPI.escapeHtml(t.path) + '</div>' +
-                    '</div>' +
-                '</div>' +
-                (isActive ? '<span style="font-size:0.75rem; color:var(--brand-teal); font-weight:bold; flex-shrink:0; margin-left:6px;">✓</span>' : '');
-
-                item.onclick = (e) => {
-                    e.stopPropagation();
-                    if (!isActive) {
-                        sendToPython({ action: "switch_team", path: t.path, name: t.name });
-                    }
-                    const teamDd = document.getElementById('team-dropdown');
-                    if (teamDd) teamDd.classList.remove('open');
-                };
-                listEl.appendChild(item);
-            });
-        }
-
-        const btnTeamPill = document.getElementById('btn-team-pill');
-        if (btnTeamPill) {
-            btnTeamPill.onclick = (e) => {
-                e.stopPropagation();
-                if (headerAgentDropdown) headerAgentDropdown.classList.remove('open');
-                const teamDd = document.getElementById('team-dropdown');
-                if (teamDd) {
-                    teamDd.classList.toggle('open');
-                    if (teamDd.classList.contains('open')) {
-                        sendToPython({ action: "get_teams" });
-                        const searchInput = document.getElementById('team-dropdown-search');
-                        renderTeamDropdown(searchInput ? searchInput.value : "");
-                        if (searchInput) searchInput.focus();
-                    }
-                }
-            };
-        }
-
-        const teamSearchInput = document.getElementById('team-dropdown-search');
-        if (teamSearchInput) {
-            teamSearchInput.addEventListener('input', (e) => renderTeamDropdown(e.target.value));
-        }
-
-        const btnManageTeamsDropdown = document.getElementById('btn-dropdown-manage-teams');
-        if (btnManageTeamsDropdown) {
-            btnManageTeamsDropdown.onclick = (e) => {
-                e.stopPropagation();
-                const teamDd = document.getElementById('team-dropdown');
-                if (teamDd) teamDd.classList.remove('open');
-                openTeamsModal();
-            };
-        }
+        document.getElementById('btn-abort').onclick = () => {
+            sendToPython({ action: "abort" });
+            workingAgentsMap.clear();
+            workingIndicator.style.display = "none";
+            stopReactorAnimation();
+            appendLog("[bold red]Operation Aborted by User.[/bold red]", false);
+        };
 
         function openMcpModal() {
             const logEl = document.getElementById('mcp-console-log');
@@ -3139,40 +2907,6 @@ const COMPLETE_CLIENT_HTML = `
                     sendToPython({ action: "save_mcp_config", config: jsonVal });
                 };
             }
-
-        function openMcpModal() {
-            const logEl = document.getElementById('mcp-console-log');
-            const statusEl = document.getElementById('mcp-status-msg');
-            if (logEl) { logEl.style.display = 'none'; logEl.innerText = ''; }
-            if (statusEl) statusEl.innerText = '';
-            sendToPython({ action: "get_mcp_config" });
-            document.getElementById('mcp-modal').style.display = 'flex';
-        }
-
-        const btnMcpQuery = document.getElementById('btn-mcp-query');
-        if (btnMcpQuery) {
-            btnMcpQuery.onclick = () => {
-                const editor = document.getElementById('mcp-json-editor');
-                const jsonVal = (editor ? editor.value : "").trim();
-                sendToPython({ action: "query_mcp_tools", config: jsonVal });
-            };
-        }
-
-        const btnMcpSave = document.getElementById('btn-mcp-save');
-        if (btnMcpSave) {
-            btnMcpSave.onclick = () => {
-                const editor = document.getElementById('mcp-json-editor');
-                const jsonVal = (editor ? editor.value : "").trim();
-                const statusEl = document.getElementById('mcp-status-msg');
-                try { JSON.parse(jsonVal); } catch (e) {
-                    if (statusEl) statusEl.innerHTML = \`<span style="color:var(--brand-red);">✗ Invalid JSON format: \${e.message}</span>\`;
-                    return;
-                }
-                btnMcpSave.disabled = true;
-                btnMcpSave.innerText = 'Saving...';
-                sendToPython({ action: "save_mcp_config", config: jsonVal });
-            };
-        }
 
         // Header Agent Dropdown
         function renderHeaderAgentDropdown(filter = "") {
@@ -3266,6 +3000,7 @@ const COMPLETE_CLIENT_HTML = `
         }
         let currentWorkspaceRelPath = "";
         let pendingDeleteItem = null;
+
 
         function openWorkspaceModal(relPath = "") {
             currentWorkspaceRelPath = relPath;
@@ -3704,19 +3439,10 @@ const COMPLETE_CLIENT_HTML = `
                         break;
 
                     case "status_bar":
-                        if (msg.is_nomem !== undefined) {
-                            isNoMemorySession = Boolean(msg.is_nomem);
-                            updateNewChatButtonState();
-                        }
                         updateStatusBar(msg);
                         break;
 
                     case "clear_chat":
-                        isChatEmpty = true;
-                        if (msg.is_nomem !== undefined) {
-                            isNoMemorySession = Boolean(msg.is_nomem);
-                        }
-                        updateNewChatButtonState();
                         window._isReplayingHistory = true;
                         setTimeout(() => { window._isReplayingHistory = false; }, 400);
                         chatContainer.innerHTML = '';
@@ -4028,21 +3754,11 @@ const COMPLETE_CLIENT_HTML = `
         }
 
         function appendLog(text, isMarkdown) {
-            const clean = stripRichTags(text);
-            if (clean.includes("ALL CONTEXTS CLEARED") || clean.includes("Fresh multiagent session") || clean.includes("Fresh NO-MEMORY session")) {
-                if (welcomeHero) welcomeHero.style.display = 'block';
-                isChatEmpty = true;
-                updateNewChatButtonState();
-                return;
-            }
-            isChatEmpty = false;
-            updateNewChatButtonState();
-            hideWelcomeHero();
-
             const div = document.createElement('div');
             div.style.color = 'var(--text-dim)';
             div.style.fontSize = '0.8rem';
             div.style.margin = '0.3rem 0';
+            const clean = stripRichTags(text);
             div.innerHTML = isMarkdown ? renderMarkdownText(clean) : window.electronAPI.escapeHtml(clean).replace(/\\n/g, '<br>');
             chatContainer.appendChild(div);
             applyLatexPass(div);
@@ -4053,8 +3769,6 @@ const COMPLETE_CLIENT_HTML = `
         let lastOptimisticTime = 0;
 
         function appendMessageBlock(header, content, color, isMarkdown, silent = false) {
-            isChatEmpty = false;
-            updateNewChatButtonState();
             hideWelcomeHero();
             const cleanHead = stripRichTags(header);
             const cleanBody = stripRichTags(content);
@@ -4274,8 +3988,6 @@ const COMPLETE_CLIENT_HTML = `
         }
 
         function mountAIBox(agentName, color) {
-            isChatEmpty = false;
-            updateNewChatButtonState();
             hideWelcomeHero();
             soundFX.agentChime();
             const agentAccent = color || getAgentColor(agentName);
