@@ -317,13 +317,21 @@ class HeadlessAgentView:
 
     def is_onboarding_needed(self) -> bool:
         settings_path = os.path.join(self.agent_manager.agents_dir, "settings.json")
-        is_pristine = not os.path.exists(settings_path)
-        if is_pristine:
-            return True
-        if len(self.agent_manager.agents) <= 1:
-            key = self.active_agent.get_api_key()
-            if not key or key == "":
-                return True
+        if os.path.exists(settings_path):
+            return False
+        if len(self.agent_manager.agents) > 1:
+            return False
+        key = self.active_agent.get_api_key()
+        if key and key != "":
+            return False
+        # Legacy key check to prevent false onboarding on upgraded phones
+        try:
+            import keyring
+            safe_name = self.active_agent.name.lower().replace(" ", "_")
+            if keyring.get_password("Federate", f"agent_key_{safe_name}"):
+                return False
+        except Exception:
+            pass
         return False
 
     def ensure_chatgpt_auth_for_agent(self, agent):
@@ -1118,6 +1126,31 @@ def log_keyring_diagnostics():
         return False
 
 
+def migrate_legacy_agent_keys():
+    try:
+        import keyring
+        from toolbox import get_team_dir
+        team_dir = get_team_dir()
+        team_tag = re.sub(r'[^a-zA-Z0-9_]', '_', os.path.basename(team_dir)).lower().lstrip("_") or "default"
+        agents_dir = os.path.join(team_dir, "agents")
+        if os.path.exists(agents_dir):
+            for fname in os.listdir(agents_dir):
+                if fname.endswith(".json") and fname not in ("settings.json", "schedules.json", "translated_backstories.json"):
+                    agent_name = fname[:-5]
+                    safe_agent = agent_name.lower().replace(" ", "_")
+                    new_user = f"agent_key_{team_tag}_{safe_agent}"
+                    legacy_user = f"agent_key_{safe_agent}"
+                    legacy_val = keyring.get_password("Federate", legacy_user)
+                    if legacy_val and not keyring.get_password("Federate", new_user):
+                        keyring.set_password("Federate", new_user, legacy_val)
+                    new_backup = f"agent_backup_key_{team_tag}_{safe_agent}"
+                    legacy_backup = f"agent_backup_key_{safe_agent}"
+                    legacy_b_val = keyring.get_password("Federate", legacy_backup)
+                    if legacy_b_val and not keyring.get_password("Federate", new_backup):
+                        keyring.set_password("Federate", new_backup, legacy_b_val)
+    except Exception:
+        pass
+
 def handle_client_message(view, data):
     action = data.get("action")
 
@@ -1139,6 +1172,7 @@ def handle_client_message(view, data):
     if action == "keyring_unlock":
         pwd = data.get("password", "").strip()
         if toolbox.unlock_keyring(pwd):
+            migrate_legacy_agent_keys()
             view.send_to_electron({"type": "keyring_unlock_success"})
             view.update_status_bar()
             view.send_to_electron({
