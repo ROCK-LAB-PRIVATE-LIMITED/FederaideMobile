@@ -810,20 +810,48 @@ class HeadlessAgentView:
     def restore_team(self, fields):
         def _clone():
             import subprocess
-            remote_url = fields.get("remote_url", "").strip()
-            folder_path = fields.get("path", "").strip()
-            if not remote_url or not folder_path:
+            import urllib.parse
+
+            raw_remote = fields.get("remote_url", "").strip()
+            raw_path = fields.get("path", "").strip()
+            git_user = fields.get("git_user", "").strip()
+            git_pat = fields.get("git_pat", "").strip()
+
+            if not raw_remote or not raw_path:
                 self.send_to_electron({"type": "git_action_result", "action": "restore", "status": "error", "error": "Missing remote URL or path"})
                 return
+
+            # 1. Resolve folder path relative to FederateWorkspace
+            if not os.path.isabs(raw_path):
+                folder_path = os.path.abspath(os.path.join(os.path.expanduser("~"), "FederateWorkspace", raw_path))
+            else:
+                folder_path = os.path.abspath(raw_path)
+
+            # 2. Inject authentication into the clone URL
+            auth_url = raw_remote
+            if git_pat:
+                parsed = urllib.parse.urlsplit(raw_remote)
+                if parsed.scheme in ("http", "https"):
+                    user_part = urllib.parse.quote(git_user) if git_user else ""
+                    pat_part = urllib.parse.quote(git_pat)
+                    creds = f"{user_part}:{pat_part}@" if user_part else f"{pat_part}@"
+                    auth_netloc = f"{creds}{parsed.hostname}" + (f":{parsed.port}" if parsed.port else "")
+                    auth_url = urllib.parse.urlunsplit((parsed.scheme, auth_netloc, parsed.path, parsed.query, parsed.fragment))
+
+            env = os.environ.copy()
+            env["GIT_TERMINAL_PROMPT"] = "0"
+
             try:
-                res = subprocess.run(["git", "clone", remote_url, folder_path], capture_output=True, text=True, timeout=120)
+                res = subprocess.run(["git", "clone", auth_url, folder_path], capture_output=True, text=True, timeout=120, env=env)
                 if res.returncode == 0:
                     self.save_team(fields)
                     self.send_to_electron({"type": "git_action_result", "action": "restore", "status": "success", "message": f"Cloned into {folder_path}"})
                 else:
-                    self.send_to_electron({"type": "git_action_result", "action": "restore", "status": "error", "error": res.stderr or res.stdout})
+                    err_clean = (res.stderr or res.stdout).replace(git_pat, "********") if git_pat else (res.stderr or res.stdout)
+                    self.send_to_electron({"type": "git_action_result", "action": "restore", "status": "error", "error": err_clean})
             except Exception as e:
                 self.send_to_electron({"type": "git_action_result", "action": "restore", "status": "error", "error": str(e)})
+
         threading.Thread(target=_clone, daemon=True).start()
 
     def get_agent_data(self, name=None):
