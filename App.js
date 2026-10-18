@@ -5069,6 +5069,7 @@ const COMPLETE_CLIENT_HTML = `
 export default function App() {
   const webViewRef = useRef(null);
   const scrollViewRef = useRef(null);
+  const termuxScrollRef = useRef(null);
 
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntent();
 
@@ -5076,6 +5077,7 @@ export default function App() {
   const [initStatus, setInitStatus] = useState('Initializing Termux engine...');
   const [termuxLogs, setTermuxLogs] = useState([]);
   const [showTermuxModal, setShowTermuxModal] = useState(false);
+  const [termuxInput, setTermuxInput] = useState('');
   const [fatalError, setFatalError] = useState(null);
 
   // Catch unhandled JS errors and show them on-screen
@@ -5335,12 +5337,15 @@ export default function App() {
     };
   }, []);
 
-  // Auto-scroll the setup logs
+  // Auto-scroll the setup logs and termux console
   useEffect(() => {
       if (scrollViewRef.current && isInitializing) {
           scrollViewRef.current.scrollToEnd({ animated: true });
       }
-  }, [termuxLogs, isInitializing]);
+      if (termuxScrollRef.current && showTermuxModal) {
+          termuxScrollRef.current.scrollToEnd({ animated: true });
+      }
+  }, [termuxLogs, isInitializing, showTermuxModal]);
 
   // Process incoming share intents from external apps using expo-share-intent
   useEffect(() => {
@@ -5569,13 +5574,14 @@ export default function App() {
       {/* Termux Console Debug Modal */}
       {showTermuxModal && (
         <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, styles.debugModalCard]}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.modalCard, styles.debugModalCard]}>
             <View style={styles.debugHeaderRow}>
               <Text style={styles.debugModalTitle}>Termux Backend Console</Text>
               <View style={[styles.statusDot, { backgroundColor: '#3ddbd9' }]} />
             </View>
 
             <ScrollView 
+              ref={termuxScrollRef}
               style={styles.debugLogScroll} 
               contentContainerStyle={styles.debugLogContent}
               nestedScrollEnabled={true}
@@ -5598,6 +5604,32 @@ export default function App() {
               )}
             </ScrollView>
 
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, backgroundColor: '#060709', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 10 }}>
+              <Text style={{ color: '#3ddbd9', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 14 }}>$</Text>
+              <TextInput
+                style={{ flex: 1, color: '#f0f2f5', paddingVertical: 8, paddingHorizontal: 8, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 13 }}
+                placeholder="Enter command..."
+                placeholderTextColor="#7e8494"
+                value={termuxInput}
+                onChangeText={setTermuxInput}
+                onSubmitEditing={() => {
+                  const val = termuxInput.trim();
+                  if (val && TermuxNative && TermuxNative.sendToPython) {
+                    if (val.startsWith('{')) {
+                      TermuxNative.sendToPython(val);
+                    } else {
+                      const cmdText = val.startsWith('!') ? val : '!' + val;
+                      TermuxNative.sendToPython(JSON.stringify({ action: 'input', text: cmdText }));
+                    }
+                  }
+                  setTermuxInput('');
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+                blurOnSubmit={false}
+              />
+            </View>
+
             <View style={styles.modalBtnRow}>
               <TouchableOpacity
                 style={[styles.btn, styles.btnCancel]}
@@ -5612,7 +5644,7 @@ export default function App() {
                 <Text style={styles.btnTextBlack}>Close</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       )}
 

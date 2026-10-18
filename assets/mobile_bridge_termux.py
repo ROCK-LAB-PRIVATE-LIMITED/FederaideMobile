@@ -507,6 +507,11 @@ class HeadlessAgentView:
         if prompt.startswith("!"):
             cmd = prompt[1:].strip()
             out = process_shell_command(cmd, self)
+            try:
+                sys.stderr.write(f"\n$ {cmd}\n{out}\n")
+                sys.stderr.flush()
+            except Exception:
+                pass
             self.log_to_ui(f"[bold red]Shell:[/bold red] {cmd}\n{out}")
             return
         if prompt.startswith("/"):
