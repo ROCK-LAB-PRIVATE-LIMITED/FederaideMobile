@@ -194,13 +194,35 @@ const COMPLETE_CLIENT_HTML = `
             display: flex;
         }
 
+        ::view-transition-image-pair(root) {
+            isolation: auto;
+        }
         ::view-transition-old(root),
         ::view-transition-new(root) {
             animation: none;
             mix-blend-mode: normal;
         }
-        ::view-transition-old(root) { z-index: 1; }
-        ::view-transition-new(root) { z-index: 9999; }
+        ::view-transition-old(root) {
+            z-index: 1;
+        }
+        ::view-transition-new(root) {
+            z-index: 9999;
+            animation: vt-circle-reveal 380ms ease-out;
+        }
+
+        @keyframes vt-circle-reveal {
+            from {
+                clip-path: circle(0px at var(--vt-x, 50%) var(--vt-y, 28px));
+            }
+            to {
+                clip-path: circle(var(--vt-r, 150vmax) at var(--vt-x, 50%) var(--vt-y, 28px));
+            }
+        }
+
+        @keyframes dropdown-pop {
+            from { opacity: 0; transform: scale(0.92) translateY(6px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
 
         /* --- SIDEBAR / DRAWER --- */
         #sidebar-overlay {
@@ -426,19 +448,21 @@ const COMPLETE_CLIENT_HTML = `
 
         #header-agent-dropdown, #team-dropdown {
             display: none;
-            position: fixed;
-            top: 54px;
-            left: 1rem;
-            width: 280px;
-            max-height: 380px;
+            position: absolute;
+            bottom: calc(100% + 8px);
+            right: 0;
+            width: 270px;
+            max-height: 320px;
             background: var(--bg-surface);
             border: 1.5px solid var(--border-focus);
             border-radius: 16px;
-            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.95);
+            box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.75);
             z-index: 2500;
             padding: 0.75rem;
             flex-direction: column;
             gap: 6px;
+            transform-origin: bottom right;
+            animation: dropdown-pop 0.16s ease-out;
         }
         #header-agent-dropdown.open, #team-dropdown.open { display: flex; }
         .dropdown-search-input {
@@ -1349,6 +1373,14 @@ const COMPLETE_CLIENT_HTML = `
                 <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
                 <span>Task Schedules</span>
             </button>
+            <button class="tray-action-btn" id="btn-tray-teams">
+                <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                <span>Team Workspaces</span>
+            </button>
+            <button class="tray-action-btn" id="btn-tray-mcp">
+                <svg viewBox="0 0 24 24"><path d="M16 7V3h-2v4h-4V3H8v4H6c-1.1 0-2 .9-2 2v5c0 3.31 2.69 6 6 6v3h4v-3c3.31 0 6-2.69 6-6V9c0-1.1-.9-2-2-2h-2zm0 7c0 2.21-1.79 4-4 4s-4-1.79-4-4V9h8v5z"/></svg>
+                <span>MCP Servers</span>
+            </button>
             <button class="tray-action-btn" id="btn-tray-directory">
                 <svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
                 <span id="tray-cwd-label">Workspace Directory</span>
@@ -2076,7 +2108,7 @@ const COMPLETE_CLIENT_HTML = `
                 <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
                     Define your Model Context Protocol (MCP) servers in JSON format below:
                 </p>
-                <textarea id="mcp-json-editor" class="form-control" style="font-family: var(--font-mono); font-size: 0.82rem; min-height: 220px; tab-size: 2;" placeholder='{\n  "mcpServers": {\n  }\n}'></textarea>
+                <textarea id="mcp-json-editor" class="form-control" style="font-family: var(--font-mono); font-size: 0.82rem; min-height: 220px; tab-size: 2;" placeholder='{\\n  "mcpServers": {\\n  }\\n}'></textarea>
                 <div id="mcp-status-msg" style="font-size: 0.78rem; min-height: 16px; margin: 6px 0;"></div>
                 <div id="mcp-console-log" style="display: none; background: var(--code-block-bg); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px; max-height: 160px; overflow-y: auto; font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); line-height: 1.45; white-space: pre-wrap; margin-top: 8px;"></div>
             </div>
@@ -2693,7 +2725,7 @@ const COMPLETE_CLIENT_HTML = `
 
         function closeModals() {
             document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
-            headerAgentDropdown.classList.remove('open');
+            if (headerAgentDropdown) headerAgentDropdown.classList.remove('open');
             const teamDropdown = document.getElementById('team-dropdown');
             if (teamDropdown) teamDropdown.classList.remove('open');
             if (typeof resetScheduleForm === 'function') resetScheduleForm();
@@ -2851,33 +2883,27 @@ const COMPLETE_CLIENT_HTML = `
             chatInput.focus();
         }
 
+        let lastKnownVh = 0;
         function updateViewportHeight() {
             if (window.visualViewport) {
                 const vh = window.visualViewport.height;
                 const offsetTop = window.visualViewport.offsetTop || 0;
-                const appMain = document.getElementById('app-main');
-                if (appMain) {
-                    appMain.style.height = vh + 'px';
-                    appMain.style.top = offsetTop + 'px';
+                if (Math.abs(vh - lastKnownVh) > 2) {
+                    lastKnownVh = vh;
+                    const appMain = document.getElementById('app-main');
+                    if (appMain) {
+                        appMain.style.height = vh + 'px';
+                        appMain.style.top = offsetTop + 'px';
+                    }
                 }
             }
-            if (window.scrollY !== 0 || window.scrollX !== 0) {
-                window.scrollTo(0, 0);
-            }
-            document.body.scrollTop = 0;
-            document.documentElement.scrollTop = 0;
         }
 
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', updateViewportHeight);
-            window.visualViewport.addEventListener('scroll', () => {
-                updateViewportHeight();
-            });
+        } else {
+            window.addEventListener('resize', updateViewportHeight);
         }
-        window.addEventListener('resize', updateViewportHeight);
-        window.addEventListener('scroll', () => {
-            updateViewportHeight();
-        });
 
         // Prevent root document bounce/pull from lifting the entry dock
         document.addEventListener('touchmove', (e) => {
@@ -2893,7 +2919,11 @@ const COMPLETE_CLIENT_HTML = `
 
         document.addEventListener('click', (e) => {
             if (!e.target.closest('#btn-header-agent-pill') && !e.target.closest('#header-agent-dropdown')) {
-                headerAgentDropdown.classList.remove('open');
+                if (headerAgentDropdown) headerAgentDropdown.classList.remove('open');
+            }
+            if (!e.target.closest('#btn-team-pill') && !e.target.closest('#team-dropdown')) {
+                const teamDd = document.getElementById('team-dropdown');
+                if (teamDd) teamDd.classList.remove('open');
             }
             if (!e.target.closest('#btn-team-pill') && !e.target.closest('#team-dropdown')) {
                 const teamDd = document.getElementById('team-dropdown');
@@ -2940,33 +2970,41 @@ const COMPLETE_CLIENT_HTML = `
             }
 
             const btn = document.getElementById('btn-theme-toggle');
-            const rect = btn.getBoundingClientRect();
-            const x = e.clientX || (rect.left + rect.width / 2);
-            const y = e.clientY || (rect.top + rect.height / 2);
-            const endRadius = Math.hypot(
+            const rect = btn ? btn.getBoundingClientRect() : null;
+            const x = rect ? Math.round(rect.left + rect.width / 2) : Math.round(window.innerWidth / 2);
+            const y = rect ? Math.round(rect.top + rect.height / 2) : 28;
+            const endRadius = Math.ceil(Math.hypot(
                 Math.max(x, window.innerWidth - x),
                 Math.max(y, window.innerHeight - y)
-            );
+            ));
+
+            document.documentElement.style.setProperty('--vt-x', x + 'px');
+            document.documentElement.style.setProperty('--vt-y', y + 'px');
+            document.documentElement.style.setProperty('--vt-r', endRadius + 'px');
 
             const transition = document.startViewTransition(() => {
                 applyTheme(nextTheme);
             });
 
-            transition.ready.then(() => {
-                document.documentElement.animate(
-                    {
-                        clipPath: [
-                            \`circle(0px at \${x}px \${y}px)\`,
-                            \`circle(\${endRadius}px at \${x}px \${y}px)\`
-                        ]
-                    },
-                    {
-                        duration: 450,
-                        easing: 'ease-out',
-                        pseudoElement: '::view-transition-new(root)'
-                    }
-                );
-            });
+            if (transition && transition.ready) {
+                transition.ready.then(() => {
+                    try {
+                        document.documentElement.animate(
+                            {
+                                clipPath: [
+                                    'circle(0px at ' + x + 'px ' + y + 'px)',
+                                    'circle(' + endRadius + 'px at ' + x + 'px ' + y + 'px)'
+                                ]
+                            },
+                            {
+                                duration: 380,
+                                easing: 'ease-out',
+                                pseudoElement: '::view-transition-new(root)'
+                            }
+                        );
+                    } catch (e) {}
+                });
+            }
         };
 
         initTheme();
@@ -2998,11 +3036,11 @@ const COMPLETE_CLIENT_HTML = `
             };
         }
 
-        function renderTeamDropdown(filter = "") {
+        function renderTeamDropdown(filter) {
             const listEl = document.getElementById('dropdown-teams-list');
             if (!listEl) return;
             listEl.innerHTML = '';
-            const q = filter.toLowerCase().trim();
+            const q = (filter || '').toLowerCase().trim();
             const filtered = (cachedTeams || []).filter(t => (t.name || '').toLowerCase().includes(q) || (t.path || '').toLowerCase().includes(q));
 
             if (filtered.length === 0) {
@@ -3011,19 +3049,17 @@ const COMPLETE_CLIENT_HTML = `
             }
 
             filtered.forEach(t => {
-                const isActive = !!t.is_active;
+                const isActive = Boolean(t.is_active);
                 const item = document.createElement('div');
                 item.className = 'dropdown-agent-item ' + (isActive ? 'active' : '');
-                item.innerHTML = \`
-                    <div style="display:flex; align-items:center; gap:8px; overflow:hidden; min-width:0;">
-                        <span style="font-size:0.85rem; flex-shrink:0;">📁</span>
-                        <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                            <div style="font-weight:\${isActive ? '700' : '500'}; color:\${isActive ? 'var(--brand-teal)' : 'var(--text-main)'}; font-size:0.82rem; text-overflow:ellipsis; overflow:hidden;">\${window.electronAPI.escapeHtml(t.name)}</div>
-                            <div style="font-size:0.68rem; color:var(--text-dim); text-overflow:ellipsis; overflow:hidden;">\${window.electronAPI.escapeHtml(t.path)}</div>
-                        </div>
-                    </div>
-                    \${isActive ? '<span style="font-size:0.75rem; color:var(--brand-teal); font-weight:bold; flex-shrink:0; margin-left:6px;">✓</span>' : ''}
-                \`;
+                item.innerHTML = '<div style="display:flex; align-items:center; gap:8px; overflow:hidden; min-width:0;">' +
+                    '<span style="font-size:0.85rem; flex-shrink:0;">📁</span>' +
+                    '<div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' +
+                        '<div style="font-weight:' + (isActive ? '700' : '500') + '; color:' + (isActive ? 'var(--brand-teal)' : 'var(--text-main)') + '; font-size:0.82rem; text-overflow:ellipsis; overflow:hidden;">' + window.electronAPI.escapeHtml(t.name) + '</div>' +
+                        '<div style="font-size:0.68rem; color:var(--text-dim); text-overflow:ellipsis; overflow:hidden;">' + window.electronAPI.escapeHtml(t.path) + '</div>' +
+                    '</div>' +
+                '</div>' +
+                (isActive ? '<span style="font-size:0.75rem; color:var(--brand-teal); font-weight:bold; flex-shrink:0; margin-left:6px;">✓</span>' : '');
 
                 item.onclick = (e) => {
                     e.stopPropagation();
@@ -3041,7 +3077,7 @@ const COMPLETE_CLIENT_HTML = `
         if (btnTeamPill) {
             btnTeamPill.onclick = (e) => {
                 e.stopPropagation();
-                headerAgentDropdown.classList.remove('open');
+                if (headerAgentDropdown) headerAgentDropdown.classList.remove('open');
                 const teamDd = document.getElementById('team-dropdown');
                 if (teamDd) {
                     teamDd.classList.toggle('open');
@@ -3070,164 +3106,39 @@ const COMPLETE_CLIENT_HTML = `
             };
         }
 
-        function openTeamsModal(targetPath = null) {
-            sendToPython({ action: "get_teams", path: targetPath });
-            document.getElementById('teams-modal').style.display = 'flex';
+        function openMcpModal() {
+            const logEl = document.getElementById('mcp-console-log');
+            const statusEl = document.getElementById('mcp-status-msg');
+            if (logEl) { logEl.style.display = 'none'; logEl.innerText = ''; }
+            if (statusEl) statusEl.innerText = '';
+            sendToPython({ action: "get_mcp_config" });
+            document.getElementById('mcp-modal').style.display = 'flex';
         }
 
-        function renderTeamsUI(data) {
-            const listEl = document.getElementById('teams-list-container');
-            if (!listEl) return;
-            listEl.innerHTML = '';
-
-            cachedTeams = data.teams || [];
-            const edit = data.editing_team || {};
-            editingTeamPath = edit.path || null;
-
-            const activeTeam = cachedTeams.find(t => t.is_active) || cachedTeams[0] || { name: 'Default' };
-            const activeTeamLabel = document.getElementById('active-team-name');
-            if (activeTeamLabel) activeTeamLabel.innerText = activeTeam.name;
-
-            const searchInput = document.getElementById('team-dropdown-search');
-            renderTeamDropdown(searchInput ? searchInput.value : "");
-
-            const titleEl = document.getElementById('team-form-title');
-            if (titleEl) titleEl.innerText = edit.path ? \`Editing Team Workspace: \${edit.name}\` : 'Create New Team Workspace';
-
-            document.getElementById('team-name-input').value = edit.name || '';
-            document.getElementById('team-folder-input').value = edit.path || '';
-            document.getElementById('team-remote-url-input').value = edit.remote_url || '';
-            document.getElementById('team-git-user-input').value = edit.git_user || '';
-            document.getElementById('team-git-pat-input').value = edit.git_pat || '';
-            
-            const saveLabel = document.getElementById('btn-save-team-label');
-            if (saveLabel) saveLabel.innerText = edit.path ? 'Update Team' : 'Save Team';
-
-            const teams = data.teams || [];
-            if (teams.length === 0) {
-                listEl.innerHTML = '<div style="color:var(--text-dim); font-size:0.82rem; padding:12px; text-align:center; background:var(--bg-card); border-radius:8px;">No teams registered.</div>';
-                return;
-            }
-
-            teams.forEach(t => {
-                const card = document.createElement('div');
-                card.style.cssText = \`background: var(--bg-card); border: 1px solid \${t.is_active ? 'var(--brand-teal)' : 'var(--border-subtle)'}; border-radius: 10px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; box-shadow: \${t.is_active ? '0 0 14px rgba(61, 219, 217, 0.12)' : 'none'};\`;
-
-                const left = document.createElement('div');
-                left.style.cssText = 'flex: 1; overflow: hidden; min-width: 0;';
-                left.innerHTML = \`<div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;"><span style="font-weight:700; font-size:0.88rem; color:\${t.is_active ? 'var(--brand-teal)' : 'var(--text-main)'};">\${window.electronAPI.escapeHtml(t.name)}</span>\${t.is_active ? '<span style="font-size:0.68rem; padding:2px 7px; border-radius:10px; background:rgba(140,200,75,0.15); border:1px solid var(--brand-green); color:var(--brand-green); font-weight:700;">✓ Active</span>' : ''}</div><div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">📁 \${window.electronAPI.escapeHtml(t.path)}</div>\${t.remote_url ? \`<div style="font-size:0.7rem; color:var(--brand-yellow); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px;">🔗 \${window.electronAPI.escapeHtml(t.remote_url)}</div>\` : ''}\`;
-
-                const right = document.createElement('div');
-                right.style.cssText = 'display:flex; gap:6px; align-items:center; flex-shrink:0;';
-
-                if (!t.is_active) {
-                    const btnSw = document.createElement('button');
-                    btnSw.className = 'modal-btn btn-primary';
-                    btnSw.style.cssText = 'padding:4px 10px; font-size:0.75rem; border-radius:6px;';
-                    btnSw.innerText = '⚡ Switch';
-                    btnSw.onclick = () => { sendToPython({ action: "switch_team", path: t.path, name: t.name }); closeModals(); };
-                    right.appendChild(btnSw);
-                } else {
-                    const btnActive = document.createElement('button');
-                    btnActive.className = 'modal-btn btn-secondary';
-                    btnActive.disabled = true;
-                    btnActive.style.cssText = 'padding:4px 10px; font-size:0.75rem; border-radius:6px; opacity:0.8; border-color:var(--brand-green); color:var(--brand-green);';
-                    btnActive.innerText = 'Current';
-                    right.appendChild(btnActive);
-                }
-
-                const btnEd = document.createElement('button');
-                btnEd.className = 'modal-btn btn-secondary';
-                btnEd.style.cssText = 'padding:4px 10px; font-size:0.75rem; border-radius:6px;';
-                btnEd.innerText = 'Edit';
-                btnEd.onclick = () => openTeamsModal(t.path);
-                right.appendChild(btnEd);
-
-                const btnDel = document.createElement('button');
-                btnDel.className = 'modal-btn btn-secondary';
-                btnDel.style.cssText = 'padding:4px 8px; font-size:0.75rem; border-radius:6px; color:var(--brand-red);';
-                btnDel.innerText = '🗑️';
-                btnDel.onclick = () => {
-                    pendingDeleteTeam = t;
-                    document.getElementById('team-del-prompt-text').innerText = \`Are you sure you want to remove team "\${t.name}" (\${t.path})?\`;
-                    document.getElementById('team-delete-modal').style.display = 'flex';
-                };
-                right.appendChild(btnDel);
-
-                card.appendChild(left);
-                card.appendChild(right);
-                listEl.appendChild(card);
-            });
+        const btnMcpQuery = document.getElementById('btn-mcp-query');
+        if (btnMcpQuery) {
+            btnMcpQuery.onclick = () => {
+                const editor = document.getElementById('mcp-json-editor');
+                const jsonVal = (editor ? editor.value : "").trim();
+                sendToPython({ action: "query_mcp_tools", config: jsonVal });
+            };
         }
 
-        document.getElementById('btn-clear-team-form').onclick = () => {
-            editingTeamPath = null;
-            document.getElementById('team-form-title').innerText = 'Create New Team Workspace';
-            document.getElementById('team-name-input').value = '';
-            document.getElementById('team-folder-input').value = '';
-            document.getElementById('team-remote-url-input').value = '';
-            document.getElementById('team-git-user-input').value = '';
-            document.getElementById('team-git-pat-input').value = '';
-            document.getElementById('btn-save-team-label').innerText = 'Save Team';
-        };
-
-        document.getElementById('btn-save-team').onclick = () => {
-            sendToPython({
-                action: "save_team",
-                is_edit: !!editingTeamPath,
-                path: editingTeamPath || document.getElementById('team-folder-input').value.trim(),
-                name: document.getElementById('team-name-input').value.trim(),
-                remote_url: document.getElementById('team-remote-url-input').value.trim(),
-                git_user: document.getElementById('team-git-user-input').value.trim(),
-                git_pat: document.getElementById('team-git-pat-input').value.trim()
-            });
-        };
-
-        document.getElementById('btn-restore-team').onclick = () => {
-            const btn = document.getElementById('btn-restore-team');
-            btn.disabled = true;
-            sendToPython({
-                action: "restore_team",
-                path: document.getElementById('team-folder-input').value.trim(),
-                name: document.getElementById('team-name-input').value.trim(),
-                remote_url: document.getElementById('team-remote-url-input').value.trim(),
-                git_user: document.getElementById('team-git-user-input').value.trim(),
-                git_pat: document.getElementById('team-git-pat-input').value.trim()
-            });
-            setTimeout(() => btn.disabled = false, 2000);
-        };
-
-        ['pull', 'push', 'sync'].forEach(act => {
-            const btn = document.getElementById(\`btn-team-\${act}\`);
-            if (btn) {
-                btn.onclick = () => {
-                    btn.disabled = true;
-                    sendToPython({ action: "team_git_action", git_action: act, path: editingTeamPath || null });
+        const btnMcpSave = document.getElementById('btn-mcp-save');
+        if (btnMcpSave) {
+            btnMcpSave.onclick = () => {
+                const editor = document.getElementById('mcp-json-editor');
+                const jsonVal = (editor ? editor.value : "").trim();
+                const statusEl = document.getElementById('mcp-status-msg');
+                try { JSON.parse(jsonVal); } catch (e) {
+                        if (statusEl) statusEl.innerHTML = '<span style="color:var(--brand-red);">✗ Invalid JSON format: ' + window.electronAPI.escapeHtml(e.message) + '</span>';
+                        return;
+                    }
+                    btnMcpSave.disabled = true;
+                    btnMcpSave.innerText = 'Saving...';
+                    sendToPython({ action: "save_mcp_config", config: jsonVal });
                 };
             }
-        });
-
-        document.getElementById('btn-conflict-merge').onclick = () => {
-            document.getElementById('git-conflict-modal').style.display = 'none';
-            sendToPython({ action: "team_git_action", git_action: "auto-merge", path: pendingConflictPath });
-        };
-        document.getElementById('btn-conflict-local').onclick = () => {
-            document.getElementById('git-conflict-modal').style.display = 'none';
-            sendToPython({ action: "team_git_action", git_action: "force-push", path: pendingConflictPath });
-        };
-        document.getElementById('btn-conflict-remote').onclick = () => {
-            document.getElementById('git-conflict-modal').style.display = 'none';
-            sendToPython({ action: "team_git_action", git_action: "hard-reset-remote", path: pendingConflictPath });
-        };
-
-        document.getElementById('btn-del-unregister').onclick = () => {
-            document.getElementById('team-delete-modal').style.display = 'none';
-            if (pendingDeleteTeam) sendToPython({ action: "delete_team", path: pendingDeleteTeam.path, purge: false });
-        };
-        document.getElementById('btn-del-purge').onclick = () => {
-            document.getElementById('team-delete-modal').style.display = 'none';
-            if (pendingDeleteTeam) sendToPython({ action: "delete_team", path: pendingDeleteTeam.path, purge: true });
-        };
 
         function openMcpModal() {
             const logEl = document.getElementById('mcp-console-log');
@@ -3346,6 +3257,13 @@ const COMPLETE_CLIENT_HTML = `
             toggleDrawer(false);
             openSchedulesModal();
         };
+        const btnTrayMcp = document.getElementById('btn-tray-mcp');
+        if (btnTrayMcp) {
+            btnTrayMcp.onclick = () => {
+                toggleDrawer(false);
+                openMcpModal();
+            };
+        }
         let currentWorkspaceRelPath = "";
         let pendingDeleteItem = null;
 
@@ -3367,6 +3285,195 @@ const COMPLETE_CLIENT_HTML = `
             toggleDrawer(false);
             openWorkspaceModal("");
         };
+
+        const btnTrayTeams = document.getElementById('btn-tray-teams');
+        if (btnTrayTeams) {
+            btnTrayTeams.onclick = () => {
+                toggleDrawer(false);
+                openTeamsModal();
+            };
+        }
+
+        function openTeamsModal(targetPath = null) {
+            sendToPython({ action: "get_teams", path: targetPath });
+            document.getElementById('teams-modal').style.display = 'flex';
+        }
+
+        function renderTeamsUI(data) {
+            const listEl = document.getElementById('teams-list-container');
+            if (!listEl) return;
+            listEl.innerHTML = '';
+
+            cachedTeams = data.teams || [];
+            const edit = data.editing_team || {};
+            editingTeamPath = edit.path || null;
+
+            const activeTeam = cachedTeams.find(t => t.is_active) || cachedTeams[0] || { name: 'Default' };
+            const activeTeamLabel = document.getElementById('active-team-header-pill');
+            if (activeTeamLabel) activeTeamLabel.innerText = activeTeam.name;
+
+            const titleEl = document.getElementById('team-form-title');
+            if (titleEl) titleEl.innerText = edit.path ? ('Editing Team Workspace: ' + edit.name) : 'Create New Team Workspace';
+
+            document.getElementById('team-name-input').value = edit.name || '';
+            document.getElementById('team-folder-input').value = edit.path || '';
+            document.getElementById('team-remote-url-input').value = edit.remote_url || '';
+            document.getElementById('team-git-user-input').value = edit.git_user || '';
+            document.getElementById('team-git-pat-input').value = edit.git_pat || '';
+            
+            const saveLabel = document.getElementById('btn-save-team-label');
+            if (saveLabel) saveLabel.innerText = edit.path ? 'Update Team' : 'Save Team';
+
+            const teams = data.teams || [];
+            if (teams.length === 0) {
+                listEl.innerHTML = '<div style="color:var(--text-dim); font-size:0.82rem; padding:12px; text-align:center; background:var(--bg-card); border-radius:8px;">No teams registered.</div>';
+                return;
+            }
+
+            teams.forEach(t => {
+                const card = document.createElement('div');
+                card.style.cssText = 'background: var(--bg-card); border: 1px solid ' + (t.is_active ? 'var(--brand-teal)' : 'var(--border-subtle)') + '; border-radius: 10px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; box-shadow: ' + (t.is_active ? '0 0 14px rgba(61, 219, 217, 0.12)' : 'none') + ';';
+
+                const left = document.createElement('div');
+                left.style.cssText = 'flex: 1; overflow: hidden; min-width: 0;';
+                const remoteUrlHtml = t.remote_url ? ('<div style="font-size:0.7rem; color:var(--brand-yellow); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px;">🔗 ' + window.electronAPI.escapeHtml(t.remote_url) + '</div>') : '';
+                const activeBadge = t.is_active ? '<span style="font-size:0.68rem; padding:2px 7px; border-radius:10px; background:rgba(140,200,75,0.15); border:1px solid var(--brand-green); color:var(--brand-green); font-weight:700;">✓ Active</span>' : '';
+                left.innerHTML = '<div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;"><span style="font-weight:700; font-size:0.88rem; color:' + (t.is_active ? 'var(--brand-teal)' : 'var(--text-main)') + ';">' + window.electronAPI.escapeHtml(t.name) + '</span>' + activeBadge + '</div><div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">📁 ' + window.electronAPI.escapeHtml(t.path) + '</div>' + remoteUrlHtml;
+
+                const right = document.createElement('div');
+                right.style.cssText = 'display:flex; gap:6px; align-items:center; flex-shrink:0;';
+
+                if (!t.is_active) {
+                    const btnSw = document.createElement('button');
+                    btnSw.className = 'modal-btn btn-primary';
+                    btnSw.style.cssText = 'padding:4px 10px; font-size:0.75rem; border-radius:6px;';
+                    btnSw.innerText = '⚡ Switch';
+                    btnSw.onclick = () => { sendToPython({ action: "switch_team", path: t.path, name: t.name }); closeModals(); };
+                    right.appendChild(btnSw);
+                } else {
+                    const btnActive = document.createElement('button');
+                    btnActive.className = 'modal-btn btn-secondary';
+                    btnActive.disabled = true;
+                    btnActive.style.cssText = 'padding:4px 10px; font-size:0.75rem; border-radius:6px; opacity:0.8; border-color:var(--brand-green); color:var(--brand-green);';
+                    btnActive.innerText = 'Current';
+                    right.appendChild(btnActive);
+                }
+
+                const btnEd = document.createElement('button');
+                btnEd.className = 'modal-btn btn-secondary';
+                btnEd.style.cssText = 'padding:4px 10px; font-size:0.75rem; border-radius:6px;';
+                btnEd.innerText = 'Edit';
+                btnEd.onclick = () => openTeamsModal(t.path);
+                right.appendChild(btnEd);
+
+                const btnDel = document.createElement('button');
+                btnDel.className = 'modal-btn btn-secondary';
+                btnDel.style.cssText = 'padding:4px 8px; font-size:0.75rem; border-radius:6px; color:var(--brand-red);';
+                btnDel.innerText = '🗑️';
+                btnDel.onclick = () => {
+                    pendingDeleteTeam = t;
+                    document.getElementById('team-del-prompt-text').innerText = 'Are you sure you want to remove team "' + t.name + '" (' + t.path + ')?';
+                    document.getElementById('team-delete-modal').style.display = 'flex';
+                };
+                right.appendChild(btnDel);
+
+                card.appendChild(left);
+                card.appendChild(right);
+                listEl.appendChild(card);
+            });
+        }
+
+        const btnClearTeamForm = document.getElementById('btn-clear-team-form');
+        if (btnClearTeamForm) {
+            btnClearTeamForm.onclick = () => {
+                editingTeamPath = null;
+                document.getElementById('team-form-title').innerText = 'Create New Team Workspace';
+                document.getElementById('team-name-input').value = '';
+                document.getElementById('team-folder-input').value = '';
+                document.getElementById('team-remote-url-input').value = '';
+                document.getElementById('team-git-user-input').value = '';
+                document.getElementById('team-git-pat-input').value = '';
+                document.getElementById('btn-save-team-label').innerText = 'Save Team';
+            };
+        }
+
+        const btnSaveTeam = document.getElementById('btn-save-team');
+        if (btnSaveTeam) {
+            btnSaveTeam.onclick = () => {
+                sendToPython({
+                    action: "save_team",
+                    is_edit: Boolean(editingTeamPath),
+                    path: editingTeamPath || document.getElementById('team-folder-input').value.trim(),
+                    name: document.getElementById('team-name-input').value.trim(),
+                    remote_url: document.getElementById('team-remote-url-input').value.trim(),
+                    git_user: document.getElementById('team-git-user-input').value.trim(),
+                    git_pat: document.getElementById('team-git-pat-input').value.trim()
+                });
+            };
+        }
+
+        const btnRestoreTeam = document.getElementById('btn-restore-team');
+        if (btnRestoreTeam) {
+            btnRestoreTeam.onclick = () => {
+                btnRestoreTeam.disabled = true;
+                sendToPython({
+                    action: "restore_team",
+                    path: document.getElementById('team-folder-input').value.trim(),
+                    name: document.getElementById('team-name-input').value.trim(),
+                    remote_url: document.getElementById('team-remote-url-input').value.trim(),
+                    git_user: document.getElementById('team-git-user-input').value.trim(),
+                    git_pat: document.getElementById('team-git-pat-input').value.trim()
+                });
+                setTimeout(() => { if (btnRestoreTeam) btnRestoreTeam.disabled = false; }, 2000);
+            };
+        }
+
+        ['pull', 'push', 'sync'].forEach(act => {
+            const btn = document.getElementById('btn-team-' + act);
+            if (btn) {
+                btn.onclick = () => {
+                    btn.disabled = true;
+                    sendToPython({ action: "team_git_action", git_action: act, path: editingTeamPath || null });
+                };
+            }
+        });
+
+        const btnConflictMerge = document.getElementById('btn-conflict-merge');
+        if (btnConflictMerge) {
+            btnConflictMerge.onclick = () => {
+                document.getElementById('git-conflict-modal').style.display = 'none';
+                sendToPython({ action: "team_git_action", git_action: "auto-merge", path: pendingConflictPath });
+            };
+        }
+        const btnConflictLocal = document.getElementById('btn-conflict-local');
+        if (btnConflictLocal) {
+            btnConflictLocal.onclick = () => {
+                document.getElementById('git-conflict-modal').style.display = 'none';
+                sendToPython({ action: "team_git_action", git_action: "force-push", path: pendingConflictPath });
+            };
+        }
+        const btnConflictRemote = document.getElementById('btn-conflict-remote');
+        if (btnConflictRemote) {
+            btnConflictRemote.onclick = () => {
+                document.getElementById('git-conflict-modal').style.display = 'none';
+                sendToPython({ action: "team_git_action", git_action: "hard-reset-remote", path: pendingConflictPath });
+            };
+        }
+
+        const btnDelUnregister = document.getElementById('btn-del-unregister');
+        if (btnDelUnregister) {
+            btnDelUnregister.onclick = () => {
+                document.getElementById('team-delete-modal').style.display = 'none';
+                if (pendingDeleteTeam) sendToPython({ action: "delete_team", path: pendingDeleteTeam.path, purge: false });
+            };
+        }
+        const btnDelPurge = document.getElementById('btn-del-purge');
+        if (btnDelPurge) {
+            btnDelPurge.onclick = () => {
+                document.getElementById('team-delete-modal').style.display = 'none';
+                if (pendingDeleteTeam) sendToPython({ action: "delete_team", path: pendingDeleteTeam.path, purge: true });
+            };
+        }
 
         document.getElementById('btn-ws-clear-cache').onclick = () => {
             const btn = document.getElementById('btn-ws-clear-cache');
@@ -3598,7 +3705,7 @@ const COMPLETE_CLIENT_HTML = `
 
                     case "status_bar":
                         if (msg.is_nomem !== undefined) {
-                            isNoMemorySession = !!msg.is_nomem;
+                            isNoMemorySession = Boolean(msg.is_nomem);
                             updateNewChatButtonState();
                         }
                         updateStatusBar(msg);
@@ -3607,7 +3714,7 @@ const COMPLETE_CLIENT_HTML = `
                     case "clear_chat":
                         isChatEmpty = true;
                         if (msg.is_nomem !== undefined) {
-                            isNoMemorySession = !!msg.is_nomem;
+                            isNoMemorySession = Boolean(msg.is_nomem);
                         }
                         updateNewChatButtonState();
                         window._isReplayingHistory = true;
@@ -3728,10 +3835,10 @@ const COMPLETE_CLIENT_HTML = `
 
                         const statusEl = document.getElementById('team-git-status-msg');
                         if (msg.status === 'success') {
-                            if (statusEl) statusEl.innerHTML = \`<span style="color:var(--brand-green);">✓ Git \${msg.action}: \${window.electronAPI.escapeHtml(msg.message)}</span>\`;
+                            if (statusEl) statusEl.innerHTML = '<span style="color:var(--brand-green);">✓ Git ' + window.electronAPI.escapeHtml(msg.action) + ': ' + window.electronAPI.escapeHtml(msg.message) + '</span>';
                             appendLog('[bold green]✓ Git ' + msg.action + ': ' + msg.message + '[/bold green]', false);
                         } else {
-                            if (statusEl) statusEl.innerHTML = \`<span style="color:var(--brand-red);">✗ Git \${msg.action} failed: \${window.electronAPI.escapeHtml(msg.error || 'Unknown error')}</span>\`;
+                            if (statusEl) statusEl.innerHTML = '<span style="color:var(--brand-red);">✗ Git ' + window.electronAPI.escapeHtml(msg.action) + ' failed: ' + window.electronAPI.escapeHtml(msg.error || 'Unknown error') + '</span>';
                             appendLog('[bold red]✗ Git ' + msg.action + ' failed: ' + (msg.error || 'Unknown error') + '[/bold red]', false);
                         }
                         break;
@@ -3739,7 +3846,7 @@ const COMPLETE_CLIENT_HTML = `
 
                     case "mcp_config_data": {
                         const editor = document.getElementById('mcp-json-editor');
-                        if (editor) editor.value = msg.config || '{\n  "mcpServers": {}\n}';
+                        if (editor) editor.value = msg.config || '{\\n  "mcpServers": {}\\n}';
                         break;
                     }
 
@@ -3770,14 +3877,14 @@ const COMPLETE_CLIENT_HTML = `
                             if (tools.length === 0) {
                                 if (logEl) logEl.innerText = 'No tools returned. Check your JSON server commands, paths, and dependencies.';
                             } else {
-                                let out = \`✓ Retrieved \${tools.length} active MCP tools:\n\`;
-                                tools.forEach(t => { out += \`\n✦ \${t.name}: \${t.description}\`; });
+                                let out = '✓ Retrieved ' + tools.length + ' active MCP tools:\\n';
+                                tools.forEach(t => { out += '\\n✦ ' + t.name + ': ' + t.description; });
                                 if (logEl) logEl.innerText = out;
                             }
                             sendToPython({ action: "get_agent_data" });
                         } else if (msg.status === "error") {
                             if (btnQuery) { btnQuery.disabled = false; btnQuery.innerText = 'Query / Refresh Tools'; }
-                            if (logEl) logEl.innerText = \`✗ Query Failed: \${msg.error}\`;
+                            if (logEl) logEl.innerText = '✗ Query Failed: ' + (msg.error || 'Unknown error');
                         }
                         break;
                     }

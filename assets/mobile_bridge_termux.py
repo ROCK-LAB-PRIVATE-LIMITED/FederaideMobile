@@ -608,6 +608,202 @@ class HeadlessAgentView:
             return
         self.send_to_electron({"type": "suggestions", "matches": []})
 
+    def get_mcp_config(self):
+        mcp_path = os.path.join(FEDERATE_DIR, "mcp_servers.json")
+        cfg_str = '{\n  "mcpServers": {}\n}'
+        if os.path.exists(mcp_path):
+            try:
+                with open(mcp_path, "r", encoding="utf-8") as f:
+                    cfg_str = f.read()
+            except Exception:
+                pass
+        self.send_to_electron({"type": "mcp_config_data", "config": cfg_str})
+
+    def save_mcp_config(self, config_str):
+        try:
+            parsed = json.loads(config_str)
+            mcp_path = os.path.join(FEDERATE_DIR, "mcp_servers.json")
+            os.makedirs(FEDERATE_DIR, exist_ok=True)
+            with open(mcp_path, "w", encoding="utf-8") as f:
+                json.dump(parsed, f, indent=2)
+            if hasattr(toolbox, "init_mcp_servers"):
+                try: toolbox.init_mcp_servers()
+                except Exception: pass
+            self.send_to_electron({"type": "mcp_save_status", "status": "success"})
+        except Exception as e:
+            self.send_to_electron({"type": "mcp_save_status", "status": "error", "error": str(e)})
+
+    def query_mcp_tools(self, config_str):
+        def _query():
+            try:
+                self.send_to_electron({"type": "mcp_query_status", "status": "querying", "message": "Connecting to MCP servers..."})
+                tools = []
+                if hasattr(toolbox, "test_mcp_config"):
+                    tools = toolbox.test_mcp_config(json.loads(config_str))
+                elif hasattr(toolbox, "get_mcp_tools"):
+                    tools = toolbox.get_mcp_tools()
+                self.send_to_electron({"type": "mcp_query_status", "status": "done", "tools": tools})
+            except Exception as e:
+                self.send_to_electron({"type": "mcp_query_status", "status": "error", "error": str(e)})
+        threading.Thread(target=_query, daemon=True).start()
+
+    def get_teams_storage_path(self):
+        return os.path.join(FEDERATE_DIR, "teams.json")
+
+    def load_teams_registry(self):
+        path = self.get_teams_storage_path()
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return [{"name": "Default", "path": get_safe_starting_dir(), "is_active": True, "remote_url": ""}]
+
+    def save_teams_registry(self, teams):
+        path = self.get_teams_storage_path()
+        os.makedirs(FEDERATE_DIR, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(teams, f, indent=2)
+
+    def get_teams_data(self, target_path=None):
+        teams = self.load_teams_registry()
+        # Mark active team based on current workspace
+        for t in teams:
+            t["is_active"] = (os.path.abspath(t.get("path", "")) == os.path.abspath(self.workspace_dir))
+        
+        editing_team = {}
+        if target_path:
+            for t in teams:
+                if t.get("path") == target_path:
+                    editing_team = dict(t)
+                    break
+
+        self.send_to_electron({
+            "type": "teams_data",
+            "teams": teams,
+            "editing_team": editing_team
+        })
+
+    def switch_team(self, path, name):
+        if not path or not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+        self.set_directory(path)
+        teams = self.load_teams_registry()
+        for t in teams:
+            t["is_active"] = (os.path.abspath(t.get("path", "")) == os.path.abspath(path))
+        self.save_teams_registry(teams)
+        self.get_teams_data()
+
+    def save_team(self, fields):
+        name = fields.get("name", "").strip() or "Workspace"
+        raw_path = fields.get("path", "").strip() or f".team_{name.lower().replace(' ', '_')}"
+        if not os.path.isabs(raw_path):
+            folder_path = os.path.abspath(os.path.join(os.path.expanduser("~"), "FederateWorkspace", raw_path))
+        else:
+            folder_path = os.path.abspath(raw_path)
+        os.makedirs(folder_path, exist_ok=True)
+
+        remote_url = fields.get("remote_url", "").strip()
+        git_user = fields.get("git_user", "").strip()
+        git_pat = fields.get("git_pat", "").strip()
+
+        # Cache PAT in keyring
+        if git_pat:
+            try:
+                import keyring
+                keyring.set_password("Federate_Git", f"pat_{name.lower()}", git_pat)
+            except Exception:
+                pass
+
+        teams = self.load_teams_registry()
+        existing = False
+        for t in teams:
+            if t.get("path") == folder_path:
+                t["name"] = name
+                t["remote_url"] = remote_url
+                t["git_user"] = git_user
+                existing = True
+                break
+        if not existing:
+            teams.append({
+                "name": name,
+                "path": folder_path,
+                "remote_url": remote_url,
+                "git_user": git_user,
+                "is_active": False
+            })
+
+        self.save_teams_registry(teams)
+        self.get_teams_data()
+
+    def delete_team(self, path, purge=False):
+        teams = [t for t in self.load_teams_registry() if os.path.abspath(t.get("path", "")) != os.path.abspath(path)]
+        self.save_teams_registry(teams)
+        if purge and path and os.path.exists(path) and os.path.abspath(path) != os.path.abspath(get_safe_starting_dir()):
+            import shutil
+            try:
+                shutil.rmtree(path)
+            except Exception as e:
+                self.log_to_ui(f"[bold red]Failed to purge directory: {e}[/bold red]")
+        self.get_teams_data()
+
+    def team_git_action(self, action, target_path=None):
+        def _run():
+            work_dir = target_path or self.workspace_dir
+            import subprocess
+            try:
+                cmd = ["git"]
+                if action in ("pull", "auto-merge"):
+                    cmd += ["pull"]
+                elif action in ("push", "force-push"):
+                    cmd += ["push"]
+                    if action == "force-push": cmd += ["--force"]
+                elif action == "hard-reset-remote":
+                    cmd += ["reset", "--hard", "origin/HEAD"]
+                elif action == "sync":
+                    cmd += ["pull"]
+                
+                res = subprocess.run(cmd, cwd=work_dir, capture_output=True, text=True, timeout=60)
+                if res.returncode == 0:
+                    if action == "sync":
+                        push_res = subprocess.run(["git", "push"], cwd=work_dir, capture_output=True, text=True, timeout=60)
+                        if push_res.returncode == 0:
+                            self.send_to_electron({"type": "git_action_result", "action": "sync", "status": "success", "message": "Synced successfully"})
+                        else:
+                            self.send_to_electron({"type": "git_action_result", "action": "sync", "status": "error", "error": push_res.stderr or push_res.stdout})
+                    else:
+                        self.send_to_electron({"type": "git_action_result", "action": action, "status": "success", "message": res.stdout.strip() or "Done"})
+                else:
+                    err_out = res.stderr or res.stdout
+                    if "conflict" in err_out.lower() or "diverged" in err_out.lower():
+                        self.send_to_electron({"type": "git_conflict", "path": work_dir})
+                    else:
+                        self.send_to_electron({"type": "git_action_result", "action": action, "status": "error", "error": err_out.strip() or "Failed"})
+            except Exception as e:
+                self.send_to_electron({"type": "git_action_result", "action": action, "status": "error", "error": str(e)})
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def restore_team(self, fields):
+        def _clone():
+            import subprocess
+            remote_url = fields.get("remote_url", "").strip()
+            folder_path = fields.get("path", "").strip()
+            if not remote_url or not folder_path:
+                self.send_to_electron({"type": "git_action_result", "action": "restore", "status": "error", "error": "Missing remote URL or path"})
+                return
+            try:
+                res = subprocess.run(["git", "clone", remote_url, folder_path], capture_output=True, text=True, timeout=120)
+                if res.returncode == 0:
+                    self.save_team(fields)
+                    self.send_to_electron({"type": "git_action_result", "action": "restore", "status": "success", "message": f"Cloned into {folder_path}"})
+                else:
+                    self.send_to_electron({"type": "git_action_result", "action": "restore", "status": "error", "error": res.stderr or res.stdout})
+            except Exception as e:
+                self.send_to_electron({"type": "git_action_result", "action": "restore", "status": "error", "error": str(e)})
+        threading.Thread(target=_clone, daemon=True).start()
+
     def get_agent_data(self, name=None):
         agent = self.agent_manager.get_agent(name) or self.active_agent if (name and isinstance(name, str)) else self.active_agent
         data = asdict(agent)
@@ -1022,6 +1218,24 @@ def handle_client_message(view, data):
         view.set_directory(data.get("path"))
     elif action == "get_suggestions":
         view.get_suggestions(data.get("value", ""))
+    elif action == "get_teams":
+        view.get_teams_data(data.get("path"))
+    elif action == "switch_team":
+        view.switch_team(data.get("path"), data.get("name"))
+    elif action == "save_team":
+        view.save_team(data)
+    elif action == "restore_team":
+        view.restore_team(data)
+    elif action == "delete_team":
+        view.delete_team(data.get("path"), data.get("purge", False))
+    elif action == "team_git_action":
+        view.team_git_action(data.get("git_action"), data.get("path"))
+    elif action == "get_mcp_config":
+        view.get_mcp_config()
+    elif action == "save_mcp_config":
+        view.save_mcp_config(data.get("config", "{}"))
+    elif action == "query_mcp_tools":
+        view.query_mcp_tools(data.get("config", "{}"))
     elif action == "get_agent_data":
         view.get_agent_data(data.get("name"))
     elif action == "save_agent_data":
