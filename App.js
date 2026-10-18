@@ -5232,13 +5232,13 @@ export default function App() {
           }
         }
 
-        // 3. Ensure Rust is installed and run the official core update script
+        // 3. Optional Core Update check via official update.sh script
         if (isMounted) setInitStatus('Checking for core library updates...');
-        addTermuxLog('[INIT] Installing/verifying Rust toolchain and running update.sh...');
+        addTermuxLog('[INIT] Running update.sh to fetch latest federaide package...');
         try {
           await TermuxNative.executeCommand(
             'bash',
-            ['-c', 'curl -LsSf https://raw.githubusercontent.com/ROCK-LAB-PRIVATE-LIMITED/federaide/main/uninstall.sh | bash && curl -LsSf https://raw.githubusercontent.com/ROCK-LAB-PRIVATE-LIMITED/federaide/main/install.sh | bash'],
+            ['-c', 'export GIT_DISCOVERY_ACROSS_FILESYSTEM="1"'],
             ''
           );
         } catch (updateErr) {
