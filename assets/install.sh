@@ -20,6 +20,8 @@ ARCH_NAME="$(uname -m)"
 IS_TERMUX=false
 IS_WINDOWS_BASH=false
 IS_ARM=false
+# Pinned version of FEDERaiDE to install
+FEDERAIDE_VERSION="${FEDERAIDE_VERSION:-2.0.8}"
 
 # Detect Termux (Android)
 if [ -d "/data/data/com.termux" ] || [ -n "$PREFIX" ] || [ -d "$HOME" ]; then
@@ -111,7 +113,7 @@ EOF
         # Enable TUR (Termux User Repository) to access specific archived Python versions
         pkg install -y tur-repo || true
         # Explicitly lock to Python 3.13 to match the Tyres cp313 wheels
-        pkg install -y -o Dpkg::Options::="--force-confnew" -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-overwrite" -o Dpkg::Options::="--force-unsafe-io" ca-certificates curl python3.13 uv pango gobject-introspection libffi pkg-config tree-sitter-python tree-sitter-go tree-sitter-rust tree-sitter-c tree-sitter-bash libjpeg-turbo libtiff libpng openjpeg
+        pkg install -y -o Dpkg::Options::="--force-confnew" -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-overwrite" -o Dpkg::Options::="--force-unsafe-io" ca-certificates curl git python3.13 uv pango gobject-introspection libffi pkg-config tree-sitter-python tree-sitter-go tree-sitter-rust tree-sitter-c tree-sitter-bash libjpeg-turbo libtiff libpng openjpeg
     else
         echo "[*] Running official Astral standalone uv installer..."
         curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -150,7 +152,7 @@ install_federaide_unix() {
 
         # Ensure weasyprint system dependencies are present even if uv was already installed
         echo "[*] Ensuring required system packages are installed..."
-        pkg install -y pango rust nodejs gobject-introspection libffi pkg-config tree-sitter-python tree-sitter-go tree-sitter-rust tree-sitter-c tree-sitter-bash libjpeg-turbo libtiff libpng openjpeg
+        pkg install -y git pango rust nodejs gobject-introspection libffi pkg-config tree-sitter-python tree-sitter-go tree-sitter-rust tree-sitter-c tree-sitter-bash libjpeg-turbo libtiff libpng openjpeg
 
         # 1. Define a safe working directory in Termux home space for dummy builds
         BUILD_DIR="$HOME/.tmp_sqlite_vec_build"
@@ -195,7 +197,7 @@ EOF
             --with tree-sitter \
             --with keyrings.alt \
             --with weasyprint \
-            "federaide[vision,ide,pdf]" 2>&1
+            "federaide[vision,ide,pdf]==${FEDERAIDE_VERSION}" 2>&1
         
         # Ensure the executable directory is added to the Termux path permanently
         grep -qF ".local/bin" ~/.bashrc 2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
