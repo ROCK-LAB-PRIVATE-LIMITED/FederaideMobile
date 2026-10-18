@@ -2925,6 +2925,10 @@ const COMPLETE_CLIENT_HTML = `
                 const teamDd = document.getElementById('team-dropdown');
                 if (teamDd) teamDd.classList.remove('open');
             }
+            if (!e.target.closest('#btn-team-pill') && !e.target.closest('#team-dropdown')) {
+                const teamDd = document.getElementById('team-dropdown');
+                if (teamDd) teamDd.classList.remove('open');
+            }
             const link = e.target.closest('a');
             if (link && link.href) {
                 const href = link.getAttribute('href') || link.href;
@@ -2956,7 +2960,7 @@ const COMPLETE_CLIENT_HTML = `
             applyTheme(savedTheme);
         }
 
-        document.getElementById('btn-theme-toggle').onclick = () => {
+        document.getElementById('btn-theme-toggle').onclick = (e) => {
             const current = document.documentElement.getAttribute('data-theme') || 'dark';
             const nextTheme = current === 'dark' ? 'light' : 'dark';
 
@@ -3135,6 +3139,40 @@ const COMPLETE_CLIENT_HTML = `
                     sendToPython({ action: "save_mcp_config", config: jsonVal });
                 };
             }
+
+        function openMcpModal() {
+            const logEl = document.getElementById('mcp-console-log');
+            const statusEl = document.getElementById('mcp-status-msg');
+            if (logEl) { logEl.style.display = 'none'; logEl.innerText = ''; }
+            if (statusEl) statusEl.innerText = '';
+            sendToPython({ action: "get_mcp_config" });
+            document.getElementById('mcp-modal').style.display = 'flex';
+        }
+
+        const btnMcpQuery = document.getElementById('btn-mcp-query');
+        if (btnMcpQuery) {
+            btnMcpQuery.onclick = () => {
+                const editor = document.getElementById('mcp-json-editor');
+                const jsonVal = (editor ? editor.value : "").trim();
+                sendToPython({ action: "query_mcp_tools", config: jsonVal });
+            };
+        }
+
+        const btnMcpSave = document.getElementById('btn-mcp-save');
+        if (btnMcpSave) {
+            btnMcpSave.onclick = () => {
+                const editor = document.getElementById('mcp-json-editor');
+                const jsonVal = (editor ? editor.value : "").trim();
+                const statusEl = document.getElementById('mcp-status-msg');
+                try { JSON.parse(jsonVal); } catch (e) {
+                    if (statusEl) statusEl.innerHTML = \`<span style="color:var(--brand-red);">✗ Invalid JSON format: \${e.message}</span>\`;
+                    return;
+                }
+                btnMcpSave.disabled = true;
+                btnMcpSave.innerText = 'Saving...';
+                sendToPython({ action: "save_mcp_config", config: jsonVal });
+            };
+        }
 
         // Header Agent Dropdown
         function renderHeaderAgentDropdown(filter = "") {
