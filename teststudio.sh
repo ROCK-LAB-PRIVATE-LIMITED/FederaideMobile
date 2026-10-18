@@ -99,10 +99,18 @@ npm install --legacy-peer-deps
 echo "[*] Running expo prebuild for android..."
 npx expo prebuild --platform android --clean
 
-# 6.1 Copy repo's native Android folder into sandbox to preserve inner Kotlin files
-if [ -d "$REPO_ROOT/android" ]; then
-    echo "[*] Syncing repo's android directory into sandbox to preserve inner Kotlin files..."
-    rsync -av "$REPO_ROOT/android/" "$SANDBOX_DIR/android/"
+# 6.1 Copy repo's native Android, assets, modules, and plugins folders into sandbox
+for dir in android assets modules plugins; do
+    if [ -d "$REPO_ROOT/$dir" ]; then
+        echo "[*] Syncing repo's $dir directory into sandbox..."
+        rsync -av "$REPO_ROOT/$dir/" "$SANDBOX_DIR/$dir/"
+    fi
+done
+
+# Ensure assets (bootstrap, install scripts, python bridge) are present in Android assets
+if [ -d "$REPO_ROOT/assets" ]; then
+    mkdir -p "$SANDBOX_DIR/android/app/src/main/assets"
+    rsync -av "$REPO_ROOT/assets/" "$SANDBOX_DIR/android/app/src/main/assets/"
 fi
 
 # 7. Bypass Java connection bugs for Gradle wrapper
