@@ -161,7 +161,21 @@ class AppMock:
 # --- HEADLESS AGENT VIEW CONTROLLER ---
 class HeadlessAgentView:
     def __init__(self):
-        self.workspace_dir = get_safe_starting_dir()
+        # 1. Restore the last active team workspace if saved in teams.json
+        initial_dir = get_safe_starting_dir()
+        try:
+            teams_path = os.path.join(FEDERATE_DIR, "teams.json")
+            if os.path.exists(teams_path):
+                with open(teams_path, "r", encoding="utf-8") as f:
+                    saved_teams = json.load(f)
+                for t in saved_teams:
+                    if t.get("is_active") and t.get("path") and os.path.isdir(t.get("path")):
+                        initial_dir = os.path.abspath(t["path"])
+                        break
+        except Exception:
+            pass
+
+        self.workspace_dir = initial_dir
         try: os.chdir(self.workspace_dir)
         except Exception: pass
 
@@ -711,11 +725,39 @@ class HeadlessAgentView:
         if not path or not os.path.exists(path):
             os.makedirs(path, exist_ok=True)
         self.set_directory(path)
+
         teams = self.load_teams_registry()
         for t in teams:
             t["is_active"] = (os.path.abspath(t.get("path", "")) == os.path.abspath(path))
         self.save_teams_registry(teams)
+
+        # 1. Reload managers so they bind to the newly selected team workspace
+        self.agent_manager = AgentManager()
+        self.session_manager = SessionManager()
+        self.schedule_manager = ScheduleManager()
+        migrate_legacy_agent_keys()
+
+        # 2. Select default agent for the switched team
+        default_name = self.agent_manager.get_default_agent_name()
+        self.active_agent = self.agent_manager.get_agent(default_name) or list(self.agent_manager.agents.values())[0]
+
+        # 3. Reset active context and tokens
+        self.current_tokens = 0
+        self.send_to_electron({"type": "clear_chat"})
+        self.update_status_bar()
+
+        # 4. Push updated agents, conversations, and schedules to the UI
+        self.send_to_electron({
+            "type": "init",
+            "session_token": self.session_token,
+            "active_agent": self.active_agent.name,
+            "agents": [{"name": a.name, "color": a.color, "model": a.model} for a in self.agent_manager.agents.values()],
+            "needs_onboarding": self.is_onboarding_needed()
+        })
+        self.get_sessions_list()
+        self.get_schedules_data()
         self.get_teams_data()
+        self.log_to_ui(f"[bold green]Switched to team workspace:[/] {name}")
 
     def save_team(self, fields):
         name = fields.get("name", "").strip() or "Workspace"
@@ -768,7 +810,10 @@ class HeadlessAgentView:
                 shutil.rmtree(path)
             except Exception as e:
                 self.log_to_ui(f"[bold red]Failed to purge directory: {e}[/bold red]")
-        self.get_teams_data()
+        if os.path.abspath(self.workspace_dir) == os.path.abspath(path):
+            self.switch_team(get_safe_starting_dir(), "Default")
+        else:
+            self.get_teams_data()
 
     def team_git_action(self, action, target_path=None):
         def _run():
@@ -845,7 +890,10 @@ class HeadlessAgentView:
                 res = subprocess.run(["git", "clone", auth_url, folder_path], capture_output=True, text=True, timeout=120, env=env)
                 if res.returncode == 0:
                     self.save_team(fields)
-                    self.send_to_electron({"type": "git_action_result", "action": "restore", "status": "success", "message": f"Cloned into {folder_path}"})
+                    # Automatically switch to and activate the restored team
+                    team_name = fields.get("name", "").strip() or os.path.basename(folder_path)
+                    self.switch_team(folder_path, team_name)
+                    self.send_to_electron({"type": "git_action_result", "action": "restore", "status": "success", "message": f"Cloned into {folder_path} and activated team"})
                 else:
                     err_clean = (res.stderr or res.stdout).replace(git_pat, "********") if git_pat else (res.stderr or res.stdout)
                     self.send_to_electron({"type": "git_action_result", "action": "restore", "status": "error", "error": err_clean})
