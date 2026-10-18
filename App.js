@@ -5238,7 +5238,7 @@ export default function App() {
         try {
           await TermuxNative.executeCommand(
             'bash',
-            ['-c', 'pkg install -y rust && export ANDROID_API_LEVEL=24 && curl -LsSf https://raw.githubusercontent.com/ROCK-LAB-PRIVATE-LIMITED/federaide/main/update.sh | bash'],
+            ['-c', 'curl -LsSf https://raw.githubusercontent.com/ROCK-LAB-PRIVATE-LIMITED/federaide/main/uninstall.sh | bash && curl -LsSf https://raw.githubusercontent.com/ROCK-LAB-PRIVATE-LIMITED/federaide/main/install.sh | bash'],
             ''
           );
         } catch (updateErr) {
