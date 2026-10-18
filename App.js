@@ -1325,6 +1325,10 @@ const COMPLETE_CLIENT_HTML = `
                 <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
                 <span>Task Schedules</span>
             </button>
+            <button class="tray-action-btn" id="btn-tray-teams">
+                <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                <span>Team Workspaces</span>
+            </button>
             <button class="tray-action-btn" id="btn-tray-mcp">
                 <svg viewBox="0 0 24 24"><path d="M16 7V3h-2v4h-4V3H8v4H6c-1.1 0-2 .9-2 2v5c0 3.31 2.69 6 6 6v3h4v-3c3.31 0 6-2.69 6-6V9c0-1.1-.9-2-2-2h-2zm0 7c0 2.21-1.79 4-4 4s-4-1.79-4-4V9h8v5z"/></svg>
                 <span>MCP Servers</span>
@@ -1911,6 +1915,116 @@ const COMPLETE_CLIENT_HTML = `
         </div>
     </div>
 
+    <!-- TEAMS MODAL [F1] -->
+    <div id="teams-modal" class="modal-overlay">
+        <div class="modal-dialog" style="max-width: 680px; max-height: 90vh;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-subtle); padding-bottom: 0.6rem; margin-bottom: 0.75rem;">
+                <h2 style="margin: 0; border: none; padding: 0;">Team Workspaces & Remote Git</h2>
+                <span id="active-team-header-pill" class="badge-pill" style="border: 1px solid var(--brand-teal); color: var(--brand-teal); font-size: 0.75rem; text-transform: uppercase;">Default</span>
+            </div>
+
+            <div class="modal-body">
+                <div class="section-header" id="team-form-title">Create or Edit Team Workspace</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Team Name</label>
+                        <input type="text" id="team-name-input" class="form-control" placeholder="e.g. Scraper Team">
+                    </div>
+                    <div class="form-group">
+                        <label>Folder Name or Path</label>
+                        <input type="text" id="team-folder-input" class="form-control" placeholder="e.g. .teamScraper">
+                    </div>
+                </div>
+
+                <div class="section-header">Git Remote Configuration (PAT stored in OS Keyring)</div>
+                <div class="form-group">
+                    <label>Remote URL</label>
+                    <input type="text" id="team-remote-url-input" class="form-control" placeholder="https://github.com/org/repo.git">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Git Username</label>
+                        <input type="text" id="team-git-user-input" class="form-control" placeholder="Username">
+                    </div>
+                    <div class="form-group">
+                        <label>Personal Access Token (PAT)</label>
+                        <input type="password" id="team-git-pat-input" class="form-control" placeholder="Personal Access Token">
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; width: 100%; margin: 10px 0 6px 0;">
+                    <button class="modal-btn btn-primary" id="btn-save-team" style="display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 10px; border-radius: 8px;">
+                        <span>💾</span> <span id="btn-save-team-label">Save Team</span>
+                    </button>
+                    <button class="modal-btn btn-secondary" id="btn-restore-team" style="display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 10px; border-radius: 8px;">
+                        <span>📥</span> <span>Restore (Clone)</span>
+                    </button>
+                    <button class="modal-btn btn-secondary" id="btn-clear-team-form" style="display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 10px; border-radius: 8px;">
+                        <span>🧹</span> <span>Clear Form</span>
+                    </button>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; width: 100%; margin-bottom: 14px;">
+                    <button class="modal-btn btn-secondary" id="btn-team-pull" style="display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 10px; border-radius: 8px;">
+                        <span>⬇</span> <span>Pull</span>
+                    </button>
+                    <button class="modal-btn btn-secondary" id="btn-team-push" style="display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 10px; border-radius: 8px;">
+                        <span>⬆</span> <span>Push</span>
+                    </button>
+                    <button class="modal-btn btn-secondary" id="btn-team-sync" style="display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 10px; border-radius: 8px; border-color: var(--brand-teal); color: var(--brand-teal);">
+                        <span>🔄</span> <span>Sync Now</span>
+                    </button>
+                </div>
+
+                <div class="section-header">Registered Teams</div>
+                <div id="teams-list-container" style="display: flex; flex-direction: column; gap: 8px; min-height: 80px;"></div>
+            </div>
+            
+            <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center;">
+                <div id="team-git-status-msg" style="font-size: 0.78rem; font-family: var(--font-mono); color: var(--text-muted); min-height: 16px;"></div>
+                <button class="modal-btn btn-secondary" onclick="closeModals()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- GIT CONFLICT MODAL -->
+    <div id="git-conflict-modal" class="modal-overlay">
+        <div class="modal-dialog" style="max-width: 480px; border: 1.5px solid var(--brand-red);">
+            <h2 style="color: var(--brand-red);">Git Conflict Detected</h2>
+            <div class="modal-body">
+                <p style="font-size: 0.85rem; color: var(--text-main); margin-bottom: 8px;">
+                    The local and remote repository histories have diverged. Choose how to reconcile:
+                </p>
+                <ul style="font-size: 0.78rem; color: var(--text-dim); margin-left: 1.2rem; line-height: 1.5;">
+                    <li><b>Attempt Merge:</b> Git merges changes automatically.</li>
+                    <li><b>Keep Local:</b> Overwrites remote with local state (Force Push).</li>
+                    <li><b>Keep Remote:</b> Overwrites local files with remote state.</li>
+                </ul>
+            </div>
+            <div class="modal-actions" style="flex-wrap: wrap;">
+                <button class="modal-btn btn-primary" id="btn-conflict-merge">Attempt Merge</button>
+                <button class="modal-btn btn-secondary" id="btn-conflict-local" style="color:var(--brand-green);">Keep Local</button>
+                <button class="modal-btn btn-secondary" id="btn-conflict-remote" style="color:var(--brand-yellow);">Keep Remote</button>
+                <button class="modal-btn btn-danger" onclick="document.getElementById('git-conflict-modal').style.display='none'">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TEAM DELETE MODAL -->
+    <div id="team-delete-modal" class="modal-overlay">
+        <div class="modal-dialog" style="max-width: 440px; border: 1.5px solid var(--brand-red);">
+            <h2 style="color: var(--brand-red);">Delete Team Workspace</h2>
+            <div class="modal-body">
+                <p style="font-size: 0.85rem; color: var(--text-main);" id="team-del-prompt-text"></p>
+            </div>
+            <div class="modal-actions">
+                <button class="modal-btn btn-secondary" id="btn-del-unregister" style="color:var(--brand-yellow);">Unregister Only</button>
+                <button class="modal-btn btn-danger" id="btn-del-purge">Delete from Disk</button>
+                <button class="modal-btn btn-secondary" onclick="document.getElementById('team-delete-modal').style.display='none'">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MCP CONFIG MODAL [/mcp] -->
     <div id="mcp-modal" class="modal-overlay">
         <div class="modal-dialog" style="max-width: 680px; max-height: 90vh;">
@@ -2390,6 +2504,10 @@ const COMPLETE_CLIENT_HTML = `
         let showAllSessions = false;
         let activeAIMessageBlock = null;
         let activeAIMessageBody = null;
+        let editingTeamPath = null;
+        let pendingConflictPath = null;
+        let pendingDeleteTeam = null;
+        let cachedTeams = [];
 
         function hexToRgba(hex, alpha = 1) {
             let c = (hex || '#3ddbd9').replace('#', '');
@@ -2902,6 +3020,195 @@ const COMPLETE_CLIENT_HTML = `
             openWorkspaceModal("");
         };
 
+        const btnTrayTeams = document.getElementById('btn-tray-teams');
+        if (btnTrayTeams) {
+            btnTrayTeams.onclick = () => {
+                toggleDrawer(false);
+                openTeamsModal();
+            };
+        }
+
+        function openTeamsModal(targetPath = null) {
+            sendToPython({ action: "get_teams", path: targetPath });
+            document.getElementById('teams-modal').style.display = 'flex';
+        }
+
+        function renderTeamsUI(data) {
+            const listEl = document.getElementById('teams-list-container');
+            if (!listEl) return;
+            listEl.innerHTML = '';
+
+            cachedTeams = data.teams || [];
+            const edit = data.editing_team || {};
+            editingTeamPath = edit.path || null;
+
+            const activeTeam = cachedTeams.find(t => t.is_active) || cachedTeams[0] || { name: 'Default' };
+            const activeTeamLabel = document.getElementById('active-team-header-pill');
+            if (activeTeamLabel) activeTeamLabel.innerText = activeTeam.name;
+
+            const titleEl = document.getElementById('team-form-title');
+            if (titleEl) titleEl.innerText = edit.path ? ('Editing Team Workspace: ' + edit.name) : 'Create New Team Workspace';
+
+            document.getElementById('team-name-input').value = edit.name || '';
+            document.getElementById('team-folder-input').value = edit.path || '';
+            document.getElementById('team-remote-url-input').value = edit.remote_url || '';
+            document.getElementById('team-git-user-input').value = edit.git_user || '';
+            document.getElementById('team-git-pat-input').value = edit.git_pat || '';
+            
+            const saveLabel = document.getElementById('btn-save-team-label');
+            if (saveLabel) saveLabel.innerText = edit.path ? 'Update Team' : 'Save Team';
+
+            const teams = data.teams || [];
+            if (teams.length === 0) {
+                listEl.innerHTML = '<div style="color:var(--text-dim); font-size:0.82rem; padding:12px; text-align:center; background:var(--bg-card); border-radius:8px;">No teams registered.</div>';
+                return;
+            }
+
+            teams.forEach(t => {
+                const card = document.createElement('div');
+                card.style.cssText = 'background: var(--bg-card); border: 1px solid ' + (t.is_active ? 'var(--brand-teal)' : 'var(--border-subtle)') + '; border-radius: 10px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; box-shadow: ' + (t.is_active ? '0 0 14px rgba(61, 219, 217, 0.12)' : 'none') + ';';
+
+                const left = document.createElement('div');
+                left.style.cssText = 'flex: 1; overflow: hidden; min-width: 0;';
+                const remoteUrlHtml = t.remote_url ? ('<div style="font-size:0.7rem; color:var(--brand-yellow); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px;">🔗 ' + window.electronAPI.escapeHtml(t.remote_url) + '</div>') : '';
+                const activeBadge = t.is_active ? '<span style="font-size:0.68rem; padding:2px 7px; border-radius:10px; background:rgba(140,200,75,0.15); border:1px solid var(--brand-green); color:var(--brand-green); font-weight:700;">✓ Active</span>' : '';
+                left.innerHTML = '<div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;"><span style="font-weight:700; font-size:0.88rem; color:' + (t.is_active ? 'var(--brand-teal)' : 'var(--text-main)') + ';">' + window.electronAPI.escapeHtml(t.name) + '</span>' + activeBadge + '</div><div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">📁 ' + window.electronAPI.escapeHtml(t.path) + '</div>' + remoteUrlHtml;
+
+                const right = document.createElement('div');
+                right.style.cssText = 'display:flex; gap:6px; align-items:center; flex-shrink:0;';
+
+                if (!t.is_active) {
+                    const btnSw = document.createElement('button');
+                    btnSw.className = 'modal-btn btn-primary';
+                    btnSw.style.cssText = 'padding:4px 10px; font-size:0.75rem; border-radius:6px;';
+                    btnSw.innerText = '⚡ Switch';
+                    btnSw.onclick = () => { sendToPython({ action: "switch_team", path: t.path, name: t.name }); closeModals(); };
+                    right.appendChild(btnSw);
+                } else {
+                    const btnActive = document.createElement('button');
+                    btnActive.className = 'modal-btn btn-secondary';
+                    btnActive.disabled = true;
+                    btnActive.style.cssText = 'padding:4px 10px; font-size:0.75rem; border-radius:6px; opacity:0.8; border-color:var(--brand-green); color:var(--brand-green);';
+                    btnActive.innerText = 'Current';
+                    right.appendChild(btnActive);
+                }
+
+                const btnEd = document.createElement('button');
+                btnEd.className = 'modal-btn btn-secondary';
+                btnEd.style.cssText = 'padding:4px 10px; font-size:0.75rem; border-radius:6px;';
+                btnEd.innerText = 'Edit';
+                btnEd.onclick = () => openTeamsModal(t.path);
+                right.appendChild(btnEd);
+
+                const btnDel = document.createElement('button');
+                btnDel.className = 'modal-btn btn-secondary';
+                btnDel.style.cssText = 'padding:4px 8px; font-size:0.75rem; border-radius:6px; color:var(--brand-red);';
+                btnDel.innerText = '🗑️';
+                btnDel.onclick = () => {
+                    pendingDeleteTeam = t;
+                    document.getElementById('team-del-prompt-text').innerText = 'Are you sure you want to remove team "' + t.name + '" (' + t.path + ')?';
+                    document.getElementById('team-delete-modal').style.display = 'flex';
+                };
+                right.appendChild(btnDel);
+
+                card.appendChild(left);
+                card.appendChild(right);
+                listEl.appendChild(card);
+            });
+        }
+
+        const btnClearTeamForm = document.getElementById('btn-clear-team-form');
+        if (btnClearTeamForm) {
+            btnClearTeamForm.onclick = () => {
+                editingTeamPath = null;
+                document.getElementById('team-form-title').innerText = 'Create New Team Workspace';
+                document.getElementById('team-name-input').value = '';
+                document.getElementById('team-folder-input').value = '';
+                document.getElementById('team-remote-url-input').value = '';
+                document.getElementById('team-git-user-input').value = '';
+                document.getElementById('team-git-pat-input').value = '';
+                document.getElementById('btn-save-team-label').innerText = 'Save Team';
+            };
+        }
+
+        const btnSaveTeam = document.getElementById('btn-save-team');
+        if (btnSaveTeam) {
+            btnSaveTeam.onclick = () => {
+                sendToPython({
+                    action: "save_team",
+                    is_edit: Boolean(editingTeamPath),
+                    path: editingTeamPath || document.getElementById('team-folder-input').value.trim(),
+                    name: document.getElementById('team-name-input').value.trim(),
+                    remote_url: document.getElementById('team-remote-url-input').value.trim(),
+                    git_user: document.getElementById('team-git-user-input').value.trim(),
+                    git_pat: document.getElementById('team-git-pat-input').value.trim()
+                });
+            };
+        }
+
+        const btnRestoreTeam = document.getElementById('btn-restore-team');
+        if (btnRestoreTeam) {
+            btnRestoreTeam.onclick = () => {
+                btnRestoreTeam.disabled = true;
+                sendToPython({
+                    action: "restore_team",
+                    path: document.getElementById('team-folder-input').value.trim(),
+                    name: document.getElementById('team-name-input').value.trim(),
+                    remote_url: document.getElementById('team-remote-url-input').value.trim(),
+                    git_user: document.getElementById('team-git-user-input').value.trim(),
+                    git_pat: document.getElementById('team-git-pat-input').value.trim()
+                });
+                setTimeout(() => { if (btnRestoreTeam) btnRestoreTeam.disabled = false; }, 2000);
+            };
+        }
+
+        ['pull', 'push', 'sync'].forEach(act => {
+            const btn = document.getElementById('btn-team-' + act);
+            if (btn) {
+                btn.onclick = () => {
+                    btn.disabled = true;
+                    sendToPython({ action: "team_git_action", git_action: act, path: editingTeamPath || null });
+                };
+            }
+        });
+
+        const btnConflictMerge = document.getElementById('btn-conflict-merge');
+        if (btnConflictMerge) {
+            btnConflictMerge.onclick = () => {
+                document.getElementById('git-conflict-modal').style.display = 'none';
+                sendToPython({ action: "team_git_action", git_action: "auto-merge", path: pendingConflictPath });
+            };
+        }
+        const btnConflictLocal = document.getElementById('btn-conflict-local');
+        if (btnConflictLocal) {
+            btnConflictLocal.onclick = () => {
+                document.getElementById('git-conflict-modal').style.display = 'none';
+                sendToPython({ action: "team_git_action", git_action: "force-push", path: pendingConflictPath });
+            };
+        }
+        const btnConflictRemote = document.getElementById('btn-conflict-remote');
+        if (btnConflictRemote) {
+            btnConflictRemote.onclick = () => {
+                document.getElementById('git-conflict-modal').style.display = 'none';
+                sendToPython({ action: "team_git_action", git_action: "hard-reset-remote", path: pendingConflictPath });
+            };
+        }
+
+        const btnDelUnregister = document.getElementById('btn-del-unregister');
+        if (btnDelUnregister) {
+            btnDelUnregister.onclick = () => {
+                document.getElementById('team-delete-modal').style.display = 'none';
+                if (pendingDeleteTeam) sendToPython({ action: "delete_team", path: pendingDeleteTeam.path, purge: false });
+            };
+        }
+        const btnDelPurge = document.getElementById('btn-del-purge');
+        if (btnDelPurge) {
+            btnDelPurge.onclick = () => {
+                document.getElementById('team-delete-modal').style.display = 'none';
+                if (pendingDeleteTeam) sendToPython({ action: "delete_team", path: pendingDeleteTeam.path, purge: true });
+            };
+        }
+
         document.getElementById('btn-ws-clear-cache').onclick = () => {
             const btn = document.getElementById('btn-ws-clear-cache');
             if (btn) {
@@ -3234,6 +3541,33 @@ const COMPLETE_CLIENT_HTML = `
                     case "schedules_data":
                         renderSchedulesList(msg.tasks || []);
                         break;
+
+                    case "teams_data":
+                        renderTeamsUI(msg);
+                        break;
+
+                    case "git_conflict":
+                        pendingConflictPath = msg.path;
+                        document.getElementById('git-conflict-modal').style.display = 'flex';
+                        break;
+
+                    case "git_action_result": {
+                        const btnSync = document.getElementById('btn-team-sync');
+                        const btnPull = document.getElementById('btn-team-pull');
+                        const btnPush = document.getElementById('btn-team-push');
+                        const btnRestore = document.getElementById('btn-restore-team');
+                        [btnSync, btnPull, btnPush, btnRestore].forEach(b => { if (b) b.disabled = false; });
+
+                        const statusEl = document.getElementById('team-git-status-msg');
+                        if (msg.status === 'success') {
+                            if (statusEl) statusEl.innerHTML = '<span style="color:var(--brand-green);">✓ Git ' + window.electronAPI.escapeHtml(msg.action) + ': ' + window.electronAPI.escapeHtml(msg.message) + '</span>';
+                            appendLog('[bold green]✓ Git ' + msg.action + ': ' + msg.message + '[/bold green]', false);
+                        } else {
+                            if (statusEl) statusEl.innerHTML = '<span style="color:var(--brand-red);">✗ Git ' + window.electronAPI.escapeHtml(msg.action) + ' failed: ' + window.electronAPI.escapeHtml(msg.error || 'Unknown error') + '</span>';
+                            appendLog('[bold red]✗ Git ' + msg.action + ' failed: ' + (msg.error || 'Unknown error') + '[/bold red]', false);
+                        }
+                        break;
+                    }
 
                     case "mcp_config_data": {
                         const editor = document.getElementById('mcp-json-editor');
