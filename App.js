@@ -1907,6 +1907,28 @@ const COMPLETE_CLIENT_HTML = `
         </div>
     </div>
 
+    <!-- MCP CONFIG MODAL [/mcp] -->
+    <div id="mcp-modal" class="modal-overlay">
+        <div class="modal-dialog" style="max-width: 680px; max-height: 90vh;">
+            <h2>Model Context Protocol (MCP) Configuration</h2>
+            <div class="modal-body">
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
+                    Define your Model Context Protocol (MCP) servers in JSON format below:
+                </p>
+                <textarea id="mcp-json-editor" class="form-control" style="font-family: var(--font-mono); font-size: 0.82rem; min-height: 220px; tab-size: 2;" placeholder='{\\n  "mcpServers": {\\n  }\\n}'></textarea>
+                <div id="mcp-status-msg" style="font-size: 0.78rem; min-height: 16px; margin: 6px 0;"></div>
+                <div id="mcp-console-log" style="display: none; background: var(--code-block-bg); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px; max-height: 160px; overflow-y: auto; font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); line-height: 1.45; white-space: pre-wrap; margin-top: 8px;"></div>
+            </div>
+            <div class="modal-actions" style="justify-content: space-between;">
+                <button class="modal-btn btn-primary" id="btn-mcp-query">Query / Refresh Tools</button>
+                <div style="display: flex; gap: 8px;">
+                    <button class="modal-btn btn-primary" id="btn-mcp-save" style="background: var(--brand-green);">Save Config</button>
+                    <button class="modal-btn btn-secondary" onclick="closeModals()">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- FIND & REPLACE MODAL [Ctrl+F Parity] -->
     <div id="find-replace-modal" class="modal-overlay">
         <div class="modal-dialog" style="max-width: 460px;">
@@ -2730,6 +2752,40 @@ const COMPLETE_CLIENT_HTML = `
             appendLog("[bold red]Operation Aborted by User.[/bold red]", false);
         };
 
+        function openMcpModal() {
+            const logEl = document.getElementById('mcp-console-log');
+            const statusEl = document.getElementById('mcp-status-msg');
+            if (logEl) { logEl.style.display = 'none'; logEl.innerText = ''; }
+            if (statusEl) statusEl.innerText = '';
+            sendToPython({ action: "get_mcp_config" });
+            document.getElementById('mcp-modal').style.display = 'flex';
+        }
+
+        const btnMcpQuery = document.getElementById('btn-mcp-query');
+        if (btnMcpQuery) {
+            btnMcpQuery.onclick = () => {
+                const editor = document.getElementById('mcp-json-editor');
+                const jsonVal = (editor ? editor.value : "").trim();
+                sendToPython({ action: "query_mcp_tools", config: jsonVal });
+            };
+        }
+
+        const btnMcpSave = document.getElementById('btn-mcp-save');
+        if (btnMcpSave) {
+            btnMcpSave.onclick = () => {
+                const editor = document.getElementById('mcp-json-editor');
+                const jsonVal = (editor ? editor.value : "").trim();
+                const statusEl = document.getElementById('mcp-status-msg');
+                try { JSON.parse(jsonVal); } catch (e) {
+                        if (statusEl) statusEl.innerHTML = '<span style="color:var(--brand-red);">✗ Invalid JSON format: ' + window.electronAPI.escapeHtml(e.message) + '</span>';
+                        return;
+                    }
+                    btnMcpSave.disabled = true;
+                    btnMcpSave.innerText = 'Saving...';
+                    sendToPython({ action: "save_mcp_config", config: jsonVal });
+                };
+            }
+
         // Header Agent Dropdown
         function renderHeaderAgentDropdown(filter = "") {
             dropdownAgentsList.innerHTML = '';
@@ -3167,6 +3223,51 @@ const COMPLETE_CLIENT_HTML = `
                     case "schedules_data":
                         renderSchedulesList(msg.tasks || []);
                         break;
+
+                    case "mcp_config_data": {
+                        const editor = document.getElementById('mcp-json-editor');
+                        if (editor) editor.value = msg.config || '{\\n  "mcpServers": {}\\n}';
+                        break;
+                    }
+
+                    case "mcp_save_status": {
+                        const statusEl = document.getElementById('mcp-status-msg');
+                        const btnSave = document.getElementById('btn-mcp-save');
+                        if (btnSave) { btnSave.disabled = false; btnSave.innerText = 'Save Config'; }
+                        if (msg.status === "success") {
+                            if (statusEl) statusEl.innerHTML = '<span style="color:var(--brand-green);">✓ Configuration saved and MCP servers reloaded.</span>';
+                            setTimeout(() => closeModals(), 800);
+                        } else {
+                            if (statusEl) statusEl.innerHTML = '<span style="color:var(--brand-red);">✗ Error: ' + window.electronAPI.escapeHtml(msg.error || 'Invalid JSON') + '</span>';
+                        }
+                        break;
+                    }
+
+                    case "mcp_query_status": {
+                        const logEl = document.getElementById('mcp-console-log');
+                        const btnQuery = document.getElementById('btn-mcp-query');
+                        if (logEl) logEl.style.display = 'block';
+
+                        if (msg.status === "querying") {
+                            if (btnQuery) { btnQuery.disabled = true; btnQuery.innerText = 'Querying...'; }
+                            if (logEl) logEl.innerText = msg.message || 'Connecting to MCP servers...';
+                        } else if (msg.status === "done") {
+                            if (btnQuery) { btnQuery.disabled = false; btnQuery.innerText = 'Query / Refresh Tools'; }
+                            const tools = msg.tools || [];
+                            if (tools.length === 0) {
+                                if (logEl) logEl.innerText = 'No tools returned. Check your JSON server commands, paths, and dependencies.';
+                            } else {
+                                let out = '✓ Retrieved ' + tools.length + ' active MCP tools:\\n';
+                                tools.forEach(t => { out += '\\n✦ ' + t.name + ': ' + t.description; });
+                                if (logEl) logEl.innerText = out;
+                            }
+                            sendToPython({ action: "get_agent_data" });
+                        } else if (msg.status === "error") {
+                            if (btnQuery) { btnQuery.disabled = false; btnQuery.innerText = 'Query / Refresh Tools'; }
+                            if (logEl) logEl.innerText = '✗ Query Failed: ' + (msg.error || 'Unknown error');
+                        }
+                        break;
+                    }
 
                     case "workspace_list": {
                         const listEl = document.getElementById('ws-file-list');
@@ -3849,6 +3950,12 @@ const COMPLETE_CLIENT_HTML = `
             // Save deduplication token after the bubble is mounted
             lastOptimisticText = fullText.trim();
             lastOptimisticTime = Date.now();
+
+            if (text === "/mcp") {
+                chatInput.value = '';
+                openMcpModal();
+                return;
+            }
 
             // 4. Dispatch input to backend (spinner will be triggered when the server responds)
             sendToPython({ action: "input", text: fullText });

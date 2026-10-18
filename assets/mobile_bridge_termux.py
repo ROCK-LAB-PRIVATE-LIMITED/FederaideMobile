@@ -608,6 +608,45 @@ class HeadlessAgentView:
             return
         self.send_to_electron({"type": "suggestions", "matches": []})
 
+    def get_mcp_config(self):
+        mcp_path = os.path.join(FEDERATE_DIR, "mcp_servers.json")
+        cfg_str = '{\n  "mcpServers": {}\n}'
+        if os.path.exists(mcp_path):
+            try:
+                with open(mcp_path, "r", encoding="utf-8") as f:
+                    cfg_str = f.read()
+            except Exception:
+                pass
+        self.send_to_electron({"type": "mcp_config_data", "config": cfg_str})
+
+    def save_mcp_config(self, config_str):
+        try:
+            parsed = json.loads(config_str)
+            mcp_path = os.path.join(FEDERATE_DIR, "mcp_servers.json")
+            os.makedirs(FEDERATE_DIR, exist_ok=True)
+            with open(mcp_path, "w", encoding="utf-8") as f:
+                json.dump(parsed, f, indent=2)
+            if hasattr(toolbox, "init_mcp_servers"):
+                try: toolbox.init_mcp_servers()
+                except Exception: pass
+            self.send_to_electron({"type": "mcp_save_status", "status": "success"})
+        except Exception as e:
+            self.send_to_electron({"type": "mcp_save_status", "status": "error", "error": str(e)})
+
+    def query_mcp_tools(self, config_str):
+        def _query():
+            try:
+                self.send_to_electron({"type": "mcp_query_status", "status": "querying", "message": "Connecting to MCP servers..."})
+                tools = []
+                if hasattr(toolbox, "test_mcp_config"):
+                    tools = toolbox.test_mcp_config(json.loads(config_str))
+                elif hasattr(toolbox, "get_mcp_tools"):
+                    tools = toolbox.get_mcp_tools()
+                self.send_to_electron({"type": "mcp_query_status", "status": "done", "tools": tools})
+            except Exception as e:
+                self.send_to_electron({"type": "mcp_query_status", "status": "error", "error": str(e)})
+        threading.Thread(target=_query, daemon=True).start()
+
     def get_agent_data(self, name=None):
         agent = self.agent_manager.get_agent(name) or self.active_agent if (name and isinstance(name, str)) else self.active_agent
         data = asdict(agent)
@@ -1022,6 +1061,12 @@ def handle_client_message(view, data):
         view.set_directory(data.get("path"))
     elif action == "get_suggestions":
         view.get_suggestions(data.get("value", ""))
+    elif action == "get_mcp_config":
+        view.get_mcp_config()
+    elif action == "save_mcp_config":
+        view.save_mcp_config(data.get("config", "{}"))
+    elif action == "query_mcp_tools":
+        view.query_mcp_tools(data.get("config", "{}"))
     elif action == "get_agent_data":
         view.get_agent_data(data.get("name"))
     elif action == "save_agent_data":
