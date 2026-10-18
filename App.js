@@ -5232,7 +5232,20 @@ export default function App() {
           }
         }
 
-        // 3. Start the persistent local agent bridge (stdio IPC)
+        // 3. Optional Core Update check via official update.sh script
+        if (isMounted) setInitStatus('Checking for core library updates...');
+        addTermuxLog('[INIT] Running update.sh to fetch latest federaide package...');
+        try {
+          await TermuxNative.executeCommand(
+            'bash',
+            ['-c', 'curl -LsSf https://raw.githubusercontent.com/ROCK-LAB-PRIVATE-LIMITED/federaide/main/update.sh | bash'],
+            ''
+          );
+        } catch (updateErr) {
+          addTermuxLog('[WARN] Update check skipped or failed, continuing with local version.', 'warn');
+        }
+
+        // 4. Start the persistent local agent bridge (stdio IPC)
         if (isMounted) setInitStatus('Starting local agent bridge...');
         addTermuxLog('[INIT] Starting Python backend bridge...');
         await TermuxNative.startPythonBridge();
