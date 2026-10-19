@@ -2409,6 +2409,7 @@ const COMPLETE_CLIENT_HTML = `
                 window.electronAPI.sendToPython({ action: "get_global_settings" });
                 window.electronAPI.sendToPython({ action: "get_agent_data" });
                 window.electronAPI.sendToPython({ action: "get_sessions" });
+                window.electronAPI.sendToPython({ action: "get_teams" });
                 if (window.__pendingQueue && window.__pendingQueue.length > 0) {
                     window.__pendingQueue.forEach(m => {
                         pythonListeners.forEach(cb => cb(m));
@@ -2995,12 +2996,16 @@ const COMPLETE_CLIENT_HTML = `
             if (!listEl) return;
             listEl.innerHTML = '';
             const q = (filter || '').toLowerCase().trim();
-            const filtered = (cachedTeams || []).filter(function(t) {
+            const teamsList = (cachedTeams && cachedTeams.length > 0)
+                ? cachedTeams
+                : [{ name: "Default", path: "FederateWorkspace", is_active: true }];
+
+            const filtered = teamsList.filter(function(t) {
                 return (t.name || '').toLowerCase().includes(q) || (t.path || '').toLowerCase().includes(q);
             });
 
             if (filtered.length === 0) {
-                listEl.innerHTML = '<div style="color:var(--text-dim); font-size:0.8rem; padding:8px; text-align:center;">No teams found</div>';
+                listEl.innerHTML = '<div style="color:var(--text-dim); font-size:0.8rem; padding:8px; text-align:center;">No teams matching "' + window.electronAPI.escapeHtml(filter || '') + '"</div>';
                 return;
             }
 
@@ -3429,11 +3434,14 @@ const COMPLETE_CLIENT_HTML = `
         }
 
         function renderTeamsUI(data) {
+            cachedTeams = data.teams || [];
+            const searchInput = document.getElementById('team-dropdown-search');
+            renderTeamDropdown(searchInput ? searchInput.value : "");
+
             const listEl = document.getElementById('teams-list-container');
             if (!listEl) return;
             listEl.innerHTML = '';
 
-            cachedTeams = data.teams || [];
             const edit = data.editing_team || {};
             editingTeamPath = edit.path || null;
 
@@ -3747,6 +3755,7 @@ const COMPLETE_CLIENT_HTML = `
                         });
                         
                         sendToPython({ action: "get_sessions" });
+                        sendToPython({ action: "get_teams" });
                         break;
 
                     
@@ -3997,7 +4006,10 @@ const COMPLETE_CLIENT_HTML = `
                         break;
 
                     case "teams_data":
+                        cachedTeams = msg.teams || [];
                         renderTeamsUI(msg);
+                        const teamSearchEl = document.getElementById('team-dropdown-search');
+                        renderTeamDropdown(teamSearchEl ? teamSearchEl.value : "");
                         break;
 
                     case "git_conflict":
