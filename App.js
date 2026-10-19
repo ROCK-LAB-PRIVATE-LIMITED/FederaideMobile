@@ -207,7 +207,7 @@ const COMPLETE_CLIENT_HTML = `
         }
         ::view-transition-new(root) {
             z-index: 9999;
-            animation: vt-circle-reveal 500ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            animation: vt-circle-reveal 900ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
         }
 
         @keyframes vt-circle-reveal {
