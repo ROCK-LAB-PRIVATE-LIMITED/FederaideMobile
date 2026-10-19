@@ -109,6 +109,7 @@ def get_active_team_storage_dir(team_path):
 def get_git_auth_header_args(work_dir_or_path, git_user=None, git_pat=None):
     """Generates ephemeral in-memory HTTP authorization header for Git without writing secrets to disk."""
     import base64
+    team_name = ""
     if not git_pat and work_dir_or_path:
         try:
             teams_path = os.path.join(FEDERATE_DIR, "teams.json")
@@ -120,9 +121,19 @@ def get_git_auth_header_args(work_dir_or_path, git_user=None, git_pat=None):
                     if os.path.abspath(t.get("path", "")) == norm:
                         git_user = git_user or t.get("git_user", "")
                         git_pat = t.get("git_pat", "")
+                        team_name = t.get("name", "")
                         break
         except Exception:
             pass
+
+        # Fall back to secure keyring lookup if not in teams.json and keyring is unlocked
+        if not git_pat and team_name:
+            try:
+                import keyring
+                if not toolbox.is_keyring_locked():
+                    git_pat = keyring.get_password("Federate_Git", f"pat_{team_name.lower()}")
+            except Exception:
+                pass
 
     if git_pat:
         user_str = git_user or "x-access-token"
@@ -703,35 +714,39 @@ class HeadlessAgentView:
                 env = os.environ.copy()
                 env["GIT_TERMINAL_PROMPT"] = "0"
 
-                # Check if core federaide has built-in autocommit helper
-                if hasattr(toolbox, "autocommit"):
-                    try:
-                        toolbox.autocommit(work_dir, agent_name)
-                        self.get_sessions_list()
-                        return
-                    except Exception:
-                        pass
-
-                # Check for changes in git status
-                status_res = subprocess.run(["git", "status", "--porcelain"], cwd=work_dir, capture_output=True, text=True, timeout=15)
+                # 1. Check for uncommitted changes
+                status_res = subprocess.run(["git", "status", "--porcelain"], cwd=work_dir, capture_output=True, text=True, timeout=15, env=env)
                 if not status_res.stdout.strip():
                     return
 
-                # Configure git user identity if not yet set
-                check_name = subprocess.run(["git", "config", "user.name"], cwd=work_dir, capture_output=True, text=True, timeout=5)
+                # 2. Configure git identity if not yet set
+                check_name = subprocess.run(["git", "config", "user.name"], cwd=work_dir, capture_output=True, text=True, timeout=5, env=env)
                 if not check_name.stdout.strip():
                     user_cfg = toolbox.load_global_settings()
                     u_name = user_cfg.get("user_name", "FEDERaiDE User")
-                    subprocess.run(["git", "config", "user.name", u_name], cwd=work_dir, timeout=5)
-                    subprocess.run(["git", "config", "user.email", "agent@federaide.local"], cwd=work_dir, timeout=5)
+                    subprocess.run(["git", "config", "user.name", u_name], cwd=work_dir, timeout=5, env=env)
+                    subprocess.run(["git", "config", "user.email", "agent@federaide.local"], cwd=work_dir, timeout=5, env=env)
 
-                # Stage and commit
+                # 3. Stage and commit silently (no UI notification)
                 subprocess.run(["git", "add", "-A"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
                 msg = f"FEDERaiDE autocommit: {agent_name} completed turn ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})"
                 commit_res = subprocess.run(["git", "commit", "-m", msg], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+
                 if commit_res.returncode == 0:
-                    self.log_to_ui(f"[dim green]✓ Auto-committed turn changes ({agent_name}).[/dim green]")
                     self.get_sessions_list()
+
+                    # 4. Silent background auto-push to remote if configured (matching FEDERaiDE TUI)
+                    check_remote = subprocess.run(["git", "remote"], cwd=work_dir, capture_output=True, text=True, timeout=5, env=env)
+                    if check_remote.stdout.strip():
+                        auth_args = get_git_auth_header_args(work_dir)
+                        branch_res = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=work_dir, capture_output=True, text=True, timeout=5, env=env)
+                        branch = branch_res.stdout.strip() or "main"
+
+                        push_res = subprocess.run(["git"] + auth_args + ["push", "origin", branch], cwd=work_dir, capture_output=True, text=True, timeout=60, env=env)
+                        if push_res.returncode != 0:
+                            err_out = (push_res.stderr or "") + (push_res.stdout or "")
+                            if any(k in err_out.lower() for k in ("conflict", "diverged", "rejected", "fetch first", "non-fast-forward")):
+                                self.send_to_electron({"type": "git_conflict", "path": work_dir})
             except Exception:
                 pass
 
