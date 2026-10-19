@@ -2665,6 +2665,7 @@ const COMPLETE_CLIENT_HTML = `
         let cachedUserColor = localStorage.getItem("federaide-usercolor") || "#dda0dd";
         let cachedAgents = [];
         let activeAgentName = "Rita";
+        let defaultAgentName = null;
         let cachedSessions = [];
         let showAllSessions = false;
         let activeAIMessageBlock = null;
@@ -3255,26 +3256,62 @@ const COMPLETE_CLIENT_HTML = `
                 };
             }
 
-        // Header Agent Dropdown
-        function renderHeaderAgentDropdown(filter = "") {
+        // Header Agent Dropdown with Long-Press Default Setting
+        function renderHeaderAgentDropdown(filter) {
             dropdownAgentsList.innerHTML = '';
-            const q = filter.toLowerCase().trim();
+            const q = (filter || '').toLowerCase().trim();
             const agentsList = (cachedAgents && cachedAgents.length > 0) 
                 ? cachedAgents 
                 : [{ name: activeAgentName || "Rita", color: "var(--brand-teal)", model: "Default" }];
                 
-            const filtered = agentsList.filter(a => a.name.toLowerCase().includes(q));
+            const filtered = agentsList.filter(function(a) { return a.name.toLowerCase().includes(q); });
 
-            filtered.forEach(a => {
+            filtered.forEach(function(a) {
                 const isActive = (a.name.toLowerCase() === activeAgentName.toLowerCase());
+                const isDefault = (defaultAgentName && a.name.toLowerCase() === defaultAgentName.toLowerCase());
                 const item = document.createElement('div');
                 item.className = 'dropdown-agent-item ' + (isActive ? 'active' : '');
                 item.innerHTML = '<div style="display:flex; align-items:center; gap:8px;">' +
                     '<span style="width:10px; height:10px; border-radius:50%; background:' + (a.color || 'var(--brand-teal)') + '; flex-shrink:0;"></span>' +
-                    '<span style="font-weight:' + (isActive ? '700' : '500') + ';">' + a.name + '</span>' +
+                    '<span style="font-weight:' + (isActive ? '700' : '500') + ';">' + window.electronAPI.escapeHtml(a.name) + (isDefault ? ' <span title="Default Agent" style="color:var(--brand-yellow); font-size:0.78rem;">★</span>' : '') + '</span>' +
                     '</div>' +
                     '<span style="font-size:0.75rem; color:var(--text-dim);">' + (a.model ? (a.model.split('/')[1] || a.model) : '') + (isActive ? ' ✓' : '') + '</span>';
-                item.onclick = (e) => {
+
+                let pressTimer = null;
+                let isLongPress = false;
+
+                function startPress() {
+                    isLongPress = false;
+                    pressTimer = setTimeout(function() {
+                        isLongPress = true;
+                        if (navigator.vibrate) navigator.vibrate([40, 60]);
+                        defaultAgentName = a.name;
+                        sendToPython({ action: "set_default_agent", name: a.name });
+                        renderHeaderAgentDropdown(headerAgentSearch ? headerAgentSearch.value : "");
+                    }, 500);
+                }
+
+                function cancelPress() {
+                    if (pressTimer) {
+                        clearTimeout(pressTimer);
+                        pressTimer = null;
+                    }
+                }
+
+                item.addEventListener('touchstart', startPress, { passive: true });
+                item.addEventListener('touchend', cancelPress);
+                item.addEventListener('touchcancel', cancelPress);
+                item.addEventListener('touchmove', cancelPress, { passive: true });
+
+                item.addEventListener('mousedown', startPress);
+                item.addEventListener('mouseup', cancelPress);
+                item.addEventListener('mouseleave', cancelPress);
+
+                item.onclick = function(e) {
+                    if (isLongPress) {
+                        isLongPress = false;
+                        return;
+                    }
                     e.stopPropagation();
                     activeAgentName = a.name;
                     updateHeaderAgentPill(a.name, a.color);
@@ -3282,6 +3319,16 @@ const COMPLETE_CLIENT_HTML = `
                     headerAgentDropdown.classList.remove('open');
                     sendToPython({ action: "get_agent_data", name: a.name });
                 };
+
+                item.oncontextmenu = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (navigator.vibrate) navigator.vibrate([40, 60]);
+                    defaultAgentName = a.name;
+                    sendToPython({ action: "set_default_agent", name: a.name });
+                    renderHeaderAgentDropdown(headerAgentSearch ? headerAgentSearch.value : "");
+                };
+
                 dropdownAgentsList.appendChild(item);
             });
 
@@ -3290,7 +3337,7 @@ const COMPLETE_CLIENT_HTML = `
                 empty.style.fontSize = '0.8rem';
                 empty.style.color = 'var(--text-dim)';
                 empty.style.padding = '0.5rem';
-                empty.innerText = 'No agents matching "' + filter + '"';
+                empty.innerText = 'No agents matching "' + (filter || '') + '"';
                 dropdownAgentsList.appendChild(empty);
             }
         }
@@ -3666,6 +3713,7 @@ const COMPLETE_CLIENT_HTML = `
                 switch (msg.type) {
                     case "init":
                         if (msg.session_token) sessionToken = msg.session_token;
+                        if (msg.default_agent) defaultAgentName = msg.default_agent;
                         if (msg.agents && msg.agents.length > 0) {
                             cachedAgents = msg.agents;
                         }
@@ -3721,6 +3769,11 @@ const COMPLETE_CLIENT_HTML = `
                     case "agent_selected":
                         activeAgentName = msg.name;
                         updateHeaderAgentPill(msg.name, msg.color);
+                        break;
+
+                    case "default_agent_set":
+                        defaultAgentName = msg.name;
+                        renderHeaderAgentDropdown(headerAgentSearch ? headerAgentSearch.value : "");
                         break;
 
                     case "open_external_url":

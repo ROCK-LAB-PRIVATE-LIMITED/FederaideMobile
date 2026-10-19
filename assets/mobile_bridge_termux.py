@@ -1704,6 +1704,12 @@ def handle_client_message(view, data):
         view.action_clear_all_contexts(no_memory=no_mem)
     elif action == "select_agent":
         view.select_agent(data.get("name"))
+    elif action == "set_default_agent":
+        target = data.get("name")
+        if target and target in view.agent_manager.agents:
+            view.agent_manager.set_default_agent_name(target)
+            view.log_to_ui(f"[bold green]Default agent set to '{target}'.[/bold green]")
+            view.send_to_electron({"type": "default_agent_set", "name": target})
     elif action == "set_mode":
         mode = data.get("mode")
         if mode in ("PLAN", "INTERMEDIATE", "EXECUTE"):
@@ -1878,6 +1884,7 @@ def send_auth_status(view):
             "type": "init",
             "session_token": "DIRECT_IPC_ACTIVE",
             "active_agent": view.active_agent.name,
+            "default_agent": view.agent_manager.get_default_agent_name(),
             "agents": [{"name": a.name, "color": a.color, "model": a.model} for a in view.agent_manager.agents.values()],
             "needs_onboarding": view.is_onboarding_needed()
         })
