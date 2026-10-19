@@ -95,21 +95,69 @@ def get_active_team_storage_dir(team_path):
     if not team_path or os.path.abspath(team_path) == os.path.abspath(get_safe_starting_dir()):
         return FEDERATE_DIR
 
-    # 1. Check if the repo has a .federate folder with agents or sessions
+    # 1. Check if the repository has a .federate folder with agents or sessions
     dot_fed = os.path.join(team_path, ".federate")
     if os.path.isdir(dot_fed) and (os.path.isdir(os.path.join(dot_fed, "agents")) or os.path.isdir(os.path.join(dot_fed, "sessions"))):
         return dot_fed
 
-    # 2. Check if the repo has agents/ or sessions/ directly in its root
+    # 2. Check if the repository has agents/ or sessions/ directly in its root
     if os.path.isdir(os.path.join(team_path, "agents")) or os.path.isdir(os.path.join(team_path, "sessions")):
         return team_path
 
-    # 3. Fallback: if .federate directory exists, use it; otherwise use team root
     return dot_fed if os.path.isdir(dot_fed) else team_path
 
-# Hook toolbox path resolution to dynamically bind to the active team workspace
-_orig_get_team_dir = getattr(toolbox, "get_team_dir", None)
-_orig_get_storage_path = getattr(toolbox, "get_storage_path", None)
+def get_git_auth_header_args(work_dir_or_path, git_user=None, git_pat=None):
+    """Generates ephemeral in-memory HTTP authorization header for Git without writing secrets to disk."""
+    import base64
+    if not git_pat and work_dir_or_path:
+        try:
+            teams_path = os.path.join(FEDERATE_DIR, "teams.json")
+            if os.path.exists(teams_path):
+                with open(teams_path, "r", encoding="utf-8") as f:
+                    teams = json.load(f)
+                norm = os.path.abspath(work_dir_or_path)
+                for t in teams:
+                    if os.path.abspath(t.get("path", "")) == norm:
+                        git_user = git_user or t.get("git_user", "")
+                        git_pat = t.get("git_pat", "")
+                        break
+        except Exception:
+            pass
+
+    if git_pat:
+        user_str = git_user or "x-access-token"
+        token_str = f"{user_str}:{git_pat}"
+        b64_val = base64.b64encode(token_str.encode("utf-8")).decode("ascii")
+        return ["-c", f"http.extraHeader=Authorization: Basic {b64_val}"]
+    return []
+
+def get_file_commit_or_mtime(f_path, repo_dir):
+    """Retrieves last commit timestamp for file, falling back to mtime for uncommitted/active chats."""
+    try:
+        if repo_dir and os.path.isdir(os.path.join(repo_dir, ".git")):
+            import subprocess
+            rel_p = os.path.relpath(f_path, repo_dir)
+            env = os.environ.copy()
+            env["GIT_TERMINAL_PROMPT"] = "0"
+            res = subprocess.run(
+                ["git", "log", "-1", "--format=%ct", "--", rel_p],
+                cwd=repo_dir,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                env=env
+            )
+            val = res.stdout.strip()
+            if val.isdigit():
+                commit_ts = float(val)
+                mtime = os.path.getmtime(f_path)
+                return max(commit_ts, mtime)
+    except Exception:
+        pass
+    try:
+        return os.path.getmtime(f_path)
+    except Exception:
+        return 0.0
 
 def _dynamic_get_team_dir():
     view = getattr(toolbox, "CURRENT_AGENT_VIEW", None)
@@ -130,6 +178,45 @@ def _dynamic_get_storage_path(*parts):
 
 toolbox.get_team_dir = _dynamic_get_team_dir
 toolbox.get_storage_path = _dynamic_get_storage_path
+
+def reload_team_managers(view, team_path):
+    """Explicitly instantiates and populates AgentManager & SessionManager from active team storage."""
+    active_storage = get_active_team_storage_dir(team_path)
+    agents_dir = os.path.join(active_storage, "agents")
+    sessions_dir = os.path.join(active_storage, "sessions")
+    os.makedirs(agents_dir, exist_ok=True)
+    os.makedirs(sessions_dir, exist_ok=True)
+
+    view.team_dir = active_storage
+    view.app.team_dir = active_storage
+    os.environ["FEDERATE_TEAM_DIR"] = active_storage
+    os.environ["FEDERAIDE_TEAM_DIR"] = active_storage
+
+    am = AgentManager()
+    am.agents_dir = agents_dir
+    if hasattr(am, "load_agents"):
+        try: am.load_agents()
+        except Exception: pass
+
+    # Ensure all agents in team storage are loaded into memory
+    if os.path.isdir(agents_dir):
+        for fname in os.listdir(agents_dir):
+            if fname.endswith(".json") and fname not in ("settings.json", "schedules.json", "translated_backstories.json"):
+                fpath = os.path.join(agents_dir, fname)
+                try:
+                    with open(fpath, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    if isinstance(data, dict) and "name" in data:
+                        clean_data = {k: v for k, v in data.items() if k in AgentConfig.__dataclass_fields__}
+                        cfg = AgentConfig(**clean_data)
+                        am.agents[cfg.name] = cfg
+                except Exception:
+                    pass
+
+    sm = SessionManager()
+    sm.sessions_dir = sessions_dir
+    sch = ScheduleManager()
+    return am, sm, sch
 
 # --- MOCK WIDGET & APPLICATION BRIDGE ---
 class MockDirTree:
@@ -225,23 +312,15 @@ class HeadlessAgentView:
         toolbox.CURRENT_AGENT_VIEW = self
         toolbox.CURRENT_LOG_CB = self.log_to_ui
 
-        # Point environment variables to active team storage directory
-        active_storage = get_active_team_storage_dir(self.active_team_path)
-        os.environ["FEDERATE_TEAM_DIR"] = active_storage
-        os.environ["FEDERAIDE_TEAM_DIR"] = active_storage
-        self.team_dir = active_storage
-        self.app.team_dir = active_storage
-
-        self.agent_manager = AgentManager()
-        self.session_manager = SessionManager()
-        self.schedule_manager = ScheduleManager()
-        migrate_legacy_agent_keys()
+        # Load managers from active team storage
+        self.agent_manager, self.session_manager, self.schedule_manager = reload_team_managers(self, self.active_team_path)
         self.telegram_manager = None
         self.current_telegram_chat_id = None
         self.last_screenshot_path = None
 
-        # Start background schedule timer
+        # Start background schedule timer and initial git merge check
         threading.Thread(target=self._scheduler_loop, daemon=True).start()
+        threading.Thread(target=lambda: self.check_and_merge_git_workspace(self.workspace_dir), daemon=True).start()
 
         default_name = self.agent_manager.get_default_agent_name()
         self.active_agent = self.agent_manager.get_agent(default_name) or list(self.agent_manager.agents.values())[0]
@@ -308,8 +387,48 @@ class HeadlessAgentView:
     def render_tool_error_box(self, owner_name, color, summary):
         self.send_to_electron({"type": "tool_error", "agent": owner_name, "color": color, "summary": summary})
 
+    def perform_autocommit(self, agent_name="Agent"):
+        if getattr(toolbox, "ABORT_EVENT", None) and toolbox.ABORT_EVENT.is_set():
+            return
+        work_dir = self.workspace_dir
+        if not work_dir or not os.path.isdir(os.path.join(work_dir, ".git")):
+            return
+
+        def _do_commit():
+            import subprocess
+            try:
+                env = os.environ.copy()
+                env["GIT_TERMINAL_PROMPT"] = "0"
+
+                # Check if there are uncommitted changes
+                status_res = subprocess.run(["git", "status", "--porcelain"], cwd=work_dir, capture_output=True, text=True, timeout=15, env=env)
+                if not status_res.stdout.strip():
+                    return
+
+                # Ensure git user identity is configured
+                check_name = subprocess.run(["git", "config", "user.name"], cwd=work_dir, capture_output=True, text=True, timeout=5, env=env)
+                if not check_name.stdout.strip():
+                    user_cfg = toolbox.load_global_settings()
+                    u_name = user_cfg.get("user_name", "FEDERaiDE User")
+                    subprocess.run(["git", "config", "user.name", u_name], cwd=work_dir, timeout=5, env=env)
+                    subprocess.run(["git", "config", "user.email", "agent@federaide.local"], cwd=work_dir, timeout=5, env=env)
+
+                # Stage and commit
+                subprocess.run(["git", "add", "-A"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                msg = f"FEDERaiDE autocommit: {agent_name} completed turn ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})"
+                commit_res = subprocess.run(["git", "commit", "-m", msg], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                if commit_res.returncode == 0:
+                    self.log_to_ui(f"[dim green]✓ Auto-committed turn changes ({agent_name}).[/dim green]")
+                    self.get_sessions_list()
+            except Exception:
+                pass
+
+        threading.Thread(target=_do_commit, daemon=True).start()
+
     def _toggle_spinner(self, show, agent_name="Agent", agent_color="#00FFFF"):
         self.send_to_electron({"type": "spinner", "show": show, "agent": agent_name, "color": agent_color})
+        if not show and not self._running_agents:
+            self.perform_autocommit(agent_name)
 
     def render_latex_to_unicode_ext(self, text):
         return text
@@ -562,7 +681,12 @@ class HeadlessAgentView:
         self.update_status_bar()
 
     def run_agent_task(self, agent, prompt, override_thread_id=None, batch_id=0):
-        threading.Thread(target=agent_core.run_agent_task_core, args=(self, agent, prompt, override_thread_id, batch_id), daemon=True).start()
+        def _task_runner():
+            try:
+                agent_core.run_agent_task_core(self, agent, prompt, override_thread_id, batch_id)
+            finally:
+                self.perform_autocommit(agent.name)
+        threading.Thread(target=_task_runner, daemon=True).start()
 
     def process_input(self, prompt):
         if not prompt.strip(): return
@@ -769,6 +893,39 @@ class HeadlessAgentView:
             "editing_team": editing_team
         })
 
+    def check_and_merge_git_workspace(self, work_dir):
+        if not work_dir or not os.path.isdir(os.path.join(work_dir, ".git")):
+            return
+        import subprocess
+        try:
+            env = os.environ.copy()
+            env["GIT_TERMINAL_PROMPT"] = "0"
+
+            # Check if remote tracking repository is configured
+            check_remote = subprocess.run(["git", "remote"], cwd=work_dir, capture_output=True, text=True, timeout=5, env=env)
+            if not check_remote.stdout.strip():
+                return
+
+            auth_args = get_git_auth_header_args(work_dir)
+
+            # Fetch remote changes
+            fetch_res = subprocess.run(["git"] + auth_args + ["fetch", "--all"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+            if fetch_res.returncode != 0:
+                return
+
+            # Attempt automatic merge
+            merge_res = subprocess.run(["git"] + auth_args + ["merge", "--no-edit"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+            out = (merge_res.stderr or "") + (merge_res.stdout or "")
+            if "conflict" in out.lower() or "automatic merge failed" in out.lower() or "diverged" in out.lower():
+                self.log_to_ui(f"[bold red]⚠ Git merge conflict detected in {os.path.basename(work_dir)}[/bold red]")
+                self.send_to_electron({"type": "git_conflict", "path": work_dir})
+            elif merge_res.returncode == 0 and "already up to date" not in out.lower():
+                self.log_to_ui(f"[dim green]✓ Successfully merged latest remote changes for {os.path.basename(work_dir)}.[/dim green]")
+                self.perform_autocommit("Merge Remote Updates")
+                self.get_sessions_list()
+        except Exception:
+            pass
+
     def switch_team(self, path, name):
         if not path or not os.path.exists(path):
             os.makedirs(path, exist_ok=True)
@@ -783,31 +940,22 @@ class HeadlessAgentView:
             t["is_active"] = (os.path.abspath(t.get("path", "")) == abs_path)
         self.save_teams_registry(teams)
 
-        # 1. Update storage directory routing to the selected team repository
-        active_storage = get_active_team_storage_dir(abs_path)
-        os.environ["FEDERATE_TEAM_DIR"] = active_storage
-        os.environ["FEDERAIDE_TEAM_DIR"] = active_storage
-        self.team_dir = active_storage
-        self.app.team_dir = active_storage
-
-        # 2. Re-instantiate managers so they load agents and sessions from the team repository
-        self.agent_manager = AgentManager()
-        self.session_manager = SessionManager()
-        self.schedule_manager = ScheduleManager()
+        # 1. Re-instantiate managers so they load agents and sessions directly from team storage
+        self.agent_manager, self.session_manager, self.schedule_manager = reload_team_managers(self, abs_path)
         migrate_legacy_agent_keys()
 
-        # 3. Select default agent from the team's loaded agents
+        # 2. Select default agent from team's loaded agents
         agents_list = list(self.agent_manager.agents.values())
         if agents_list:
             default_name = self.agent_manager.get_default_agent_name()
             self.active_agent = self.agent_manager.get_agent(default_name) or agents_list[0]
 
-        # 4. Clear active chat buffer and update status
+        # 3. Clear active chat buffer and update status
         self.current_tokens = 0
         self.send_to_electron({"type": "clear_chat"})
         self.update_status_bar()
 
-        # 5. Broadcast newly loaded agents, conversations list, and schedules to UI
+        # 4. Broadcast loaded agents, conversations list, and schedules to UI
         self.send_to_electron({
             "type": "init",
             "session_token": self.session_token,
@@ -819,6 +967,9 @@ class HeadlessAgentView:
         self.get_schedules_data()
         self.get_teams_data()
         self.log_to_ui(f"[bold green]Switched to team workspace:[/] {name} ({abs_path})")
+
+        # 5. Non-blocking Git merge attempt on switch
+        threading.Thread(target=lambda: self.check_and_merge_git_workspace(abs_path), daemon=True).start()
 
     def save_team(self, fields):
         name = fields.get("name", "").strip() or "Workspace"
@@ -833,11 +984,12 @@ class HeadlessAgentView:
         git_user = fields.get("git_user", "").strip()
         git_pat = fields.get("git_pat", "").strip()
 
-        # Cache PAT in keyring
+        # Securely cache PAT in keyring
         if git_pat:
             try:
                 import keyring
-                keyring.set_password("Federate_Git", f"pat_{name.lower()}", git_pat)
+                if not toolbox.is_keyring_locked():
+                    keyring.set_password("Federate_Git", f"pat_{name.lower()}", git_pat)
             except Exception:
                 pass
 
@@ -848,6 +1000,7 @@ class HeadlessAgentView:
                 t["name"] = name
                 t["remote_url"] = remote_url
                 t["git_user"] = git_user
+                t["git_pat"] = git_pat
                 existing = True
                 break
         if not existing:
@@ -856,6 +1009,7 @@ class HeadlessAgentView:
                 "path": folder_path,
                 "remote_url": remote_url,
                 "git_user": git_user,
+                "git_pat": git_pat,
                 "is_active": False
             })
 
@@ -880,30 +1034,69 @@ class HeadlessAgentView:
         def _run():
             work_dir = target_path or self.workspace_dir
             import subprocess
+            env = os.environ.copy()
+            env["GIT_TERMINAL_PROMPT"] = "0"
+            auth_args = get_git_auth_header_args(work_dir)
             try:
-                cmd = ["git"]
-                if action in ("pull", "auto-merge"):
-                    cmd += ["pull"]
-                elif action in ("push", "force-push"):
-                    cmd += ["push"]
-                    if action == "force-push": cmd += ["--force"]
-                elif action == "hard-reset-remote":
-                    cmd += ["reset", "--hard", "origin/HEAD"]
-                elif action == "sync":
-                    cmd += ["pull"]
-                
-                res = subprocess.run(cmd, cwd=work_dir, capture_output=True, text=True, timeout=60)
+                if action == "auto-merge":
+                    # Attempt automated conflict merge and autocommit
+                    res = subprocess.run(["git"] + auth_args + ["merge", "--no-edit"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                    if res.returncode == 0:
+                        self.perform_autocommit("Conflict Auto-Merge")
+                        self.agent_manager, self.session_manager, self.schedule_manager = reload_team_managers(self, work_dir)
+                        self.get_sessions_list()
+                        self.send_to_electron({"type": "git_action_result", "action": "auto-merge", "status": "success", "message": "Merged and committed successfully"})
+                    else:
+                        out = (res.stderr or "") + (res.stdout or "")
+                        self.send_to_electron({"type": "git_action_result", "action": "auto-merge", "status": "error", "error": out.strip() or "Auto-merge failed"})
+                    return
+
+                if action == "force-push":
+                    subprocess.run(["git", "merge", "--abort"], cwd=work_dir, capture_output=True, text=True, timeout=10, env=env)
+                    self.perform_autocommit("Keep Local Resolution")
+                    res = subprocess.run(["git"] + auth_args + ["push", "--force"], cwd=work_dir, capture_output=True, text=True, timeout=60, env=env)
+                    if res.returncode == 0:
+                        self.send_to_electron({"type": "git_action_result", "action": "force-push", "status": "success", "message": "Local state forced to remote"})
+                    else:
+                        self.send_to_electron({"type": "git_action_result", "action": "force-push", "status": "error", "error": res.stderr or res.stdout})
+                    return
+
+                if action == "hard-reset-remote":
+                    subprocess.run(["git", "merge", "--abort"], cwd=work_dir, capture_output=True, text=True, timeout=10, env=env)
+                    subprocess.run(["git"] + auth_args + ["fetch", "--all"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                    res = subprocess.run(["git", "reset", "--hard", "origin/HEAD"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                    if res.returncode != 0:
+                        res = subprocess.run(["git", "reset", "--hard", "@{u}"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                    subprocess.run(["git", "clean", "-fd"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                    if res.returncode == 0:
+                        self.agent_manager, self.session_manager, self.schedule_manager = reload_team_managers(self, work_dir)
+                        self.get_sessions_list()
+                        self.send_to_electron({"type": "git_action_result", "action": "hard-reset-remote", "status": "success", "message": "Reset to remote state"})
+                    else:
+                        self.send_to_electron({"type": "git_action_result", "action": "hard-reset-remote", "status": "error", "error": res.stderr or res.stdout})
+                    return
+
+                # Standard actions: pull, push, sync
+                if action in ("pull", "sync"):
+                    res = subprocess.run(["git"] + auth_args + ["pull", "--no-rebase"], cwd=work_dir, capture_output=True, text=True, timeout=60, env=env)
+                elif action == "push":
+                    self.perform_autocommit("Pre-Push Sync")
+                    res = subprocess.run(["git"] + auth_args + ["push"], cwd=work_dir, capture_output=True, text=True, timeout=60, env=env)
+
                 if res.returncode == 0:
                     if action == "sync":
-                        push_res = subprocess.run(["git", "push"], cwd=work_dir, capture_output=True, text=True, timeout=60)
+                        self.perform_autocommit("Pre-Push Sync")
+                        push_res = subprocess.run(["git"] + auth_args + ["push"], cwd=work_dir, capture_output=True, text=True, timeout=60, env=env)
                         if push_res.returncode == 0:
                             self.send_to_electron({"type": "git_action_result", "action": "sync", "status": "success", "message": "Synced successfully"})
                         else:
                             self.send_to_electron({"type": "git_action_result", "action": "sync", "status": "error", "error": push_res.stderr or push_res.stdout})
                     else:
                         self.send_to_electron({"type": "git_action_result", "action": action, "status": "success", "message": res.stdout.strip() or "Done"})
+                    self.agent_manager, self.session_manager, self.schedule_manager = reload_team_managers(self, work_dir)
+                    self.get_sessions_list()
                 else:
-                    err_out = res.stderr or res.stdout
+                    err_out = (res.stderr or "") + (res.stdout or "")
                     if "conflict" in err_out.lower() or "diverged" in err_out.lower():
                         self.send_to_electron({"type": "git_conflict", "path": work_dir})
                     else:
@@ -916,8 +1109,6 @@ class HeadlessAgentView:
     def restore_team(self, fields):
         def _clone():
             import subprocess
-            import urllib.parse
-
             raw_remote = fields.get("remote_url", "").strip()
             raw_path = fields.get("path", "").strip()
             git_user = fields.get("git_user", "").strip()
@@ -927,31 +1118,20 @@ class HeadlessAgentView:
                 self.send_to_electron({"type": "git_action_result", "action": "restore", "status": "error", "error": "Missing remote URL or path"})
                 return
 
-            # 1. Resolve folder path relative to FederateWorkspace
             if not os.path.isabs(raw_path):
                 folder_path = os.path.abspath(os.path.join(os.path.expanduser("~"), "FederateWorkspace", raw_path))
             else:
                 folder_path = os.path.abspath(raw_path)
 
-            # 2. Inject authentication into the clone URL
-            auth_url = raw_remote
-            if git_pat:
-                parsed = urllib.parse.urlsplit(raw_remote)
-                if parsed.scheme in ("http", "https"):
-                    user_part = urllib.parse.quote(git_user) if git_user else ""
-                    pat_part = urllib.parse.quote(git_pat)
-                    creds = f"{user_part}:{pat_part}@" if user_part else f"{pat_part}@"
-                    auth_netloc = f"{creds}{parsed.hostname}" + (f":{parsed.port}" if parsed.port else "")
-                    auth_url = urllib.parse.urlunsplit((parsed.scheme, auth_netloc, parsed.path, parsed.query, parsed.fragment))
-
             env = os.environ.copy()
             env["GIT_TERMINAL_PROMPT"] = "0"
+            auth_args = get_git_auth_header_args("", git_user=git_user, git_pat=git_pat)
 
             try:
-                res = subprocess.run(["git", "clone", auth_url, folder_path], capture_output=True, text=True, timeout=120, env=env)
+                # Clone using ephemeral in-memory Authorization header without embedding secrets in .git/config
+                res = subprocess.run(["git"] + auth_args + ["clone", raw_remote, folder_path], capture_output=True, text=True, timeout=120, env=env)
                 if res.returncode == 0:
                     self.save_team(fields)
-                    # Automatically switch to and activate the restored team
                     team_name = fields.get("name", "").strip() or os.path.basename(folder_path)
                     self.switch_team(folder_path, team_name)
                     self.send_to_electron({"type": "git_action_result", "action": "restore", "status": "success", "message": f"Cloned into {folder_path} and activated team"})
@@ -1137,8 +1317,13 @@ class HeadlessAgentView:
         self.log_to_ui("[bold green]Global settings saved.[/bold green]")
 
     def get_sessions_list(self):
-        sessions_dir = toolbox.get_storage_path("sessions")
-        files = sorted(glob.glob(os.path.join(sessions_dir, "*.json")), key=os.path.getmtime, reverse=True)
+        active_storage = get_active_team_storage_dir(self.active_team_path)
+        sessions_dir = os.path.join(active_storage, "sessions")
+        all_files = glob.glob(os.path.join(sessions_dir, "*.json"))
+        repo_dir = self.workspace_dir
+
+        # Sort sessions by Git last-commit timestamp (falls back to mtime for uncommitted/active chats)
+        files = sorted(all_files, key=lambda f: get_file_commit_or_mtime(f, repo_dir), reverse=True)
         name_map = agent_core.get_session_name_map()
         results = []
         for f in files:
@@ -1280,8 +1465,10 @@ def log_keyring_diagnostics():
 def migrate_legacy_agent_keys():
     try:
         import keyring
-        from toolbox import get_team_dir
-        team_dir = get_team_dir()
+        # Security Guard: Never invoke keyring while locked to avoid triggering fallback_getpass on stdin
+        if toolbox.is_keyring_locked():
+            return
+        team_dir = _dynamic_get_team_dir()
         team_tag = re.sub(r'[^a-zA-Z0-9_]', '_', os.path.basename(team_dir)).lower().lstrip("_") or "default"
         agents_dir = os.path.join(team_dir, "agents")
         if os.path.exists(agents_dir):
