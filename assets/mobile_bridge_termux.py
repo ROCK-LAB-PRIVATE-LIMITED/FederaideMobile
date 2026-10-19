@@ -680,6 +680,53 @@ class HeadlessAgentView:
         self.log_to_ui("[bold yellow]ALL CONTEXTS CLEARED. Fresh multiagent session started.[/bold yellow]")
         self.update_status_bar()
 
+    def perform_autocommit(self, agent_name="Agent"):
+        if getattr(toolbox, "ABORT_EVENT", None) and toolbox.ABORT_EVENT.is_set():
+            return
+        work_dir = self.workspace_dir
+        if not work_dir or not os.path.isdir(os.path.join(work_dir, ".git")):
+            return
+
+        def _do_commit():
+            import subprocess
+            try:
+                env = os.environ.copy()
+                env["GIT_TERMINAL_PROMPT"] = "0"
+
+                # Check if core federaide has built-in autocommit helper
+                if hasattr(toolbox, "autocommit"):
+                    try:
+                        toolbox.autocommit(work_dir, agent_name)
+                        self.get_sessions_list()
+                        return
+                    except Exception:
+                        pass
+
+                # Check for changes in git status
+                status_res = subprocess.run(["git", "status", "--porcelain"], cwd=work_dir, capture_output=True, text=True, timeout=15)
+                if not status_res.stdout.strip():
+                    return
+
+                # Configure git user identity if not yet set
+                check_name = subprocess.run(["git", "config", "user.name"], cwd=work_dir, capture_output=True, text=True, timeout=5)
+                if not check_name.stdout.strip():
+                    user_cfg = toolbox.load_global_settings()
+                    u_name = user_cfg.get("user_name", "FEDERaiDE User")
+                    subprocess.run(["git", "config", "user.name", u_name], cwd=work_dir, timeout=5)
+                    subprocess.run(["git", "config", "user.email", "agent@federaide.local"], cwd=work_dir, timeout=5)
+
+                # Stage and commit
+                subprocess.run(["git", "add", "-A"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                msg = f"FEDERaiDE autocommit: {agent_name} completed turn ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})"
+                commit_res = subprocess.run(["git", "commit", "-m", msg], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                if commit_res.returncode == 0:
+                    self.log_to_ui(f"[dim green]✓ Auto-committed turn changes ({agent_name}).[/dim green]")
+                    self.get_sessions_list()
+            except Exception:
+                pass
+
+        threading.Thread(target=_do_commit, daemon=True).start()
+
     def run_agent_task(self, agent, prompt, override_thread_id=None, batch_id=0):
         def _task_runner():
             try:
@@ -992,6 +1039,12 @@ class HeadlessAgentView:
                     keyring.set_password("Federate_Git", f"pat_{name.lower()}", git_pat)
             except Exception:
                 pass
+
+        # Update remote origin URL in git repo with credentials if present
+        if os.path.isdir(os.path.join(folder_path, ".git")) and remote_url:
+            import subprocess
+            auth_url = get_authenticated_remote_url(remote_url, git_user, git_pat)
+            subprocess.run(["git", "remote", "set-url", "origin", auth_url], cwd=folder_path, capture_output=True, text=True, timeout=10)
 
         teams = self.load_teams_registry()
         existing = False
