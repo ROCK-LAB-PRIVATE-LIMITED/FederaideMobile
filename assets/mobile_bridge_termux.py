@@ -107,6 +107,44 @@ def get_active_team_storage_dir(team_path):
     # 3. Fallback: if .federate directory exists, use it; otherwise use team root
     return dot_fed if os.path.isdir(dot_fed) else team_path
 
+def get_authenticated_remote_url(raw_url, git_user, git_pat):
+    if not raw_url or not git_pat:
+        return raw_url
+    import urllib.parse
+    parsed = urllib.parse.urlsplit(raw_url)
+    if parsed.scheme in ("http", "https"):
+        user_part = urllib.parse.quote(git_user) if git_user else ""
+        pat_part = urllib.parse.quote(git_pat)
+        creds = f"{user_part}:{pat_part}@" if user_part else f"{pat_part}@"
+        auth_netloc = f"{creds}{parsed.hostname}" + (f":{parsed.port}" if parsed.port else "")
+        return urllib.parse.urlunsplit((parsed.scheme, auth_netloc, parsed.path, parsed.query, parsed.fragment))
+    return raw_url
+
+def get_file_last_commit_timestamp(f_path, repo_dir):
+    try:
+        if repo_dir and os.path.isdir(os.path.join(repo_dir, ".git")):
+            import subprocess
+            rel_p = os.path.relpath(f_path, repo_dir)
+            res = subprocess.run(
+                ["git", "log", "-1", "--format=%ct", "--", rel_p],
+                cwd=repo_dir,
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            val = res.stdout.strip()
+            if val.isdigit():
+                commit_ts = float(val)
+                # Keep active uncommitted conversations on top if modified after last commit
+                mtime = os.path.getmtime(f_path)
+                return max(commit_ts, mtime)
+    except Exception:
+        pass
+    try:
+        return os.path.getmtime(f_path)
+    except Exception:
+        return 0.0
+
 # Hook toolbox path resolution to dynamically bind to the active team workspace
 _orig_get_team_dir = getattr(toolbox, "get_team_dir", None)
 _orig_get_storage_path = getattr(toolbox, "get_storage_path", None)
@@ -240,8 +278,9 @@ class HeadlessAgentView:
         self.current_telegram_chat_id = None
         self.last_screenshot_path = None
 
-        # Start background schedule timer
+        # Start background schedule timer and initial git merge check
         threading.Thread(target=self._scheduler_loop, daemon=True).start()
+        threading.Thread(target=lambda: self.check_and_merge_git_workspace(self.workspace_dir), daemon=True).start()
 
         default_name = self.agent_manager.get_default_agent_name()
         self.active_agent = self.agent_manager.get_agent(default_name) or list(self.agent_manager.agents.values())[0]
@@ -310,6 +349,8 @@ class HeadlessAgentView:
 
     def _toggle_spinner(self, show, agent_name="Agent", agent_color="#00FFFF"):
         self.send_to_electron({"type": "spinner", "show": show, "agent": agent_name, "color": agent_color})
+        if not show and not self._running_agents:
+            self.perform_autocommit(agent_name)
 
     def render_latex_to_unicode_ext(self, text):
         return text
@@ -561,8 +602,60 @@ class HeadlessAgentView:
         self.log_to_ui("[bold yellow]ALL CONTEXTS CLEARED. Fresh multiagent session started.[/bold yellow]")
         self.update_status_bar()
 
+    def perform_autocommit(self, agent_name="Agent"):
+        if getattr(toolbox, "ABORT_EVENT", None) and toolbox.ABORT_EVENT.is_set():
+            return
+        work_dir = self.workspace_dir
+        if not work_dir or not os.path.isdir(os.path.join(work_dir, ".git")):
+            return
+
+        def _do_commit():
+            import subprocess
+            try:
+                env = os.environ.copy()
+                env["GIT_TERMINAL_PROMPT"] = "0"
+
+                # Check if core federaide has built-in autocommit helper
+                if hasattr(toolbox, "autocommit"):
+                    try:
+                        toolbox.autocommit(work_dir, agent_name)
+                        self.get_sessions_list()
+                        return
+                    except Exception:
+                        pass
+
+                # Check for changes in git status
+                status_res = subprocess.run(["git", "status", "--porcelain"], cwd=work_dir, capture_output=True, text=True, timeout=15)
+                if not status_res.stdout.strip():
+                    return
+
+                # Configure git user identity if not yet set
+                check_name = subprocess.run(["git", "config", "user.name"], cwd=work_dir, capture_output=True, text=True, timeout=5)
+                if not check_name.stdout.strip():
+                    user_cfg = toolbox.load_global_settings()
+                    u_name = user_cfg.get("user_name", "FEDERaiDE User")
+                    subprocess.run(["git", "config", "user.name", u_name], cwd=work_dir, timeout=5)
+                    subprocess.run(["git", "config", "user.email", "agent@federaide.local"], cwd=work_dir, timeout=5)
+
+                # Stage and commit
+                subprocess.run(["git", "add", "-A"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                msg = f"FEDERaiDE autocommit: {agent_name} completed turn ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})"
+                commit_res = subprocess.run(["git", "commit", "-m", msg], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                if commit_res.returncode == 0:
+                    self.log_to_ui(f"[dim green]✓ Auto-committed turn changes ({agent_name}).[/dim green]")
+                    self.get_sessions_list()
+            except Exception:
+                pass
+
+        threading.Thread(target=_do_commit, daemon=True).start()
+
     def run_agent_task(self, agent, prompt, override_thread_id=None, batch_id=0):
-        threading.Thread(target=agent_core.run_agent_task_core, args=(self, agent, prompt, override_thread_id, batch_id), daemon=True).start()
+        def _task_worker():
+            try:
+                agent_core.run_agent_task_core(self, agent, prompt, override_thread_id, batch_id)
+            finally:
+                self.perform_autocommit(agent.name)
+        threading.Thread(target=_task_worker, daemon=True).start()
 
     def process_input(self, prompt):
         if not prompt.strip(): return
@@ -769,6 +862,37 @@ class HeadlessAgentView:
             "editing_team": editing_team
         })
 
+    def check_and_merge_git_workspace(self, work_dir):
+        if not work_dir or not os.path.isdir(os.path.join(work_dir, ".git")):
+            return
+        import subprocess
+        try:
+            env = os.environ.copy()
+            env["GIT_TERMINAL_PROMPT"] = "0"
+
+            # Check if remote tracking origin is configured
+            check_remote = subprocess.run(["git", "remote"], cwd=work_dir, capture_output=True, text=True, timeout=5)
+            if not check_remote.stdout.strip():
+                return
+
+            # Fetch remote changes
+            fetch_res = subprocess.run(["git", "fetch", "--all"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+            if fetch_res.returncode != 0:
+                return
+
+            # Attempt clean merge
+            merge_res = subprocess.run(["git", "merge", "--no-edit"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+            out = (merge_res.stderr or "") + (merge_res.stdout or "")
+            if "conflict" in out.lower() or "automatic merge failed" in out.lower():
+                self.log_to_ui(f"[bold red]⚠ Git merge conflict detected in {os.path.basename(work_dir)}[/bold red]")
+                self.send_to_electron({"type": "git_conflict", "path": work_dir})
+            elif merge_res.returncode == 0 and "already up to date" not in out.lower():
+                self.log_to_ui(f"[dim green]✓ Successfully merged latest remote changes for {os.path.basename(work_dir)}.[/dim green]")
+                self.perform_autocommit("Merge Remote Updates")
+                self.get_sessions_list()
+        except Exception:
+            pass
+
     def switch_team(self, path, name):
         if not path or not os.path.exists(path):
             os.makedirs(path, exist_ok=True)
@@ -820,6 +944,9 @@ class HeadlessAgentView:
         self.get_teams_data()
         self.log_to_ui(f"[bold green]Switched to team workspace:[/] {name} ({abs_path})")
 
+        # 6. Attempt background git merge for the newly activated team
+        threading.Thread(target=lambda: self.check_and_merge_git_workspace(abs_path), daemon=True).start()
+
     def save_team(self, fields):
         name = fields.get("name", "").strip() or "Workspace"
         raw_path = fields.get("path", "").strip() or f".team_{name.lower().replace(' ', '_')}"
@@ -840,6 +967,12 @@ class HeadlessAgentView:
                 keyring.set_password("Federate_Git", f"pat_{name.lower()}", git_pat)
             except Exception:
                 pass
+
+        # Update remote origin URL in git repo with credentials if present
+        if os.path.isdir(os.path.join(folder_path, ".git")) and remote_url:
+            import subprocess
+            auth_url = get_authenticated_remote_url(remote_url, git_user, git_pat)
+            subprocess.run(["git", "remote", "set-url", "origin", auth_url], cwd=folder_path, capture_output=True, text=True, timeout=10)
 
         teams = self.load_teams_registry()
         existing = False
@@ -880,30 +1013,70 @@ class HeadlessAgentView:
         def _run():
             work_dir = target_path or self.workspace_dir
             import subprocess
+            env = os.environ.copy()
+            env["GIT_TERMINAL_PROMPT"] = "0"
             try:
-                cmd = ["git"]
-                if action in ("pull", "auto-merge"):
-                    cmd += ["pull"]
-                elif action in ("push", "force-push"):
-                    cmd += ["push"]
-                    if action == "force-push": cmd += ["--force"]
-                elif action == "hard-reset-remote":
-                    cmd += ["reset", "--hard", "origin/HEAD"]
-                elif action == "sync":
-                    cmd += ["pull"]
-                
-                res = subprocess.run(cmd, cwd=work_dir, capture_output=True, text=True, timeout=60)
+                if action == "auto-merge":
+                    # Attempt automated conflict merge and autocommit
+                    res = subprocess.run(["git", "merge", "--no-edit"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                    if res.returncode == 0:
+                        self.perform_autocommit("Conflict Auto-Merge")
+                        self.get_sessions_list()
+                        self.send_to_electron({"type": "git_action_result", "action": "auto-merge", "status": "success", "message": "Merged and committed successfully"})
+                    else:
+                        out = (res.stderr or "") + (res.stdout or "")
+                        self.send_to_electron({"type": "git_action_result", "action": "auto-merge", "status": "error", "error": out.strip() or "Auto-merge failed"})
+                    return
+
+                if action == "force-push":
+                    # Abort any in-progress merge state, autocommit local files, and force push
+                    subprocess.run(["git", "merge", "--abort"], cwd=work_dir, capture_output=True, text=True, timeout=10, env=env)
+                    self.perform_autocommit("Keep Local Resolution")
+                    res = subprocess.run(["git", "push", "--force"], cwd=work_dir, capture_output=True, text=True, timeout=60, env=env)
+                    if res.returncode == 0:
+                        self.send_to_electron({"type": "git_action_result", "action": "force-push", "status": "success", "message": "Local state forced to remote"})
+                    else:
+                        self.send_to_electron({"type": "git_action_result", "action": "force-push", "status": "error", "error": res.stderr or res.stdout})
+                    return
+
+                if action == "hard-reset-remote":
+                    # Abort merge, hard reset to remote HEAD, and reload managers
+                    subprocess.run(["git", "merge", "--abort"], cwd=work_dir, capture_output=True, text=True, timeout=10, env=env)
+                    subprocess.run(["git", "fetch", "--all"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                    res = subprocess.run(["git", "reset", "--hard", "origin/HEAD"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                    if res.returncode != 0:
+                        res = subprocess.run(["git", "reset", "--hard", "@{u}"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                    subprocess.run(["git", "clean", "-fd"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                    if res.returncode == 0:
+                        self.agent_manager = AgentManager()
+                        self.session_manager = SessionManager()
+                        self.get_sessions_list()
+                        self.send_to_electron({"type": "git_action_result", "action": "hard-reset-remote", "status": "success", "message": "Reset to remote state"})
+                    else:
+                        self.send_to_electron({"type": "git_action_result", "action": "hard-reset-remote", "status": "error", "error": res.stderr or res.stdout})
+                    return
+
+                # Standard actions: pull, push, sync
+                if action in ("pull", "sync"):
+                    res = subprocess.run(["git", "pull", "--no-rebase"], cwd=work_dir, capture_output=True, text=True, timeout=60, env=env)
+                elif action == "push":
+                    # Autocommit any pending uncommitted turn files before pushing
+                    self.perform_autocommit("Pre-Push Sync")
+                    res = subprocess.run(["git", "push"], cwd=work_dir, capture_output=True, text=True, timeout=60, env=env)
+
                 if res.returncode == 0:
                     if action == "sync":
-                        push_res = subprocess.run(["git", "push"], cwd=work_dir, capture_output=True, text=True, timeout=60)
+                        self.perform_autocommit("Pre-Push Sync")
+                        push_res = subprocess.run(["git", "push"], cwd=work_dir, capture_output=True, text=True, timeout=60, env=env)
                         if push_res.returncode == 0:
                             self.send_to_electron({"type": "git_action_result", "action": "sync", "status": "success", "message": "Synced successfully"})
                         else:
                             self.send_to_electron({"type": "git_action_result", "action": "sync", "status": "error", "error": push_res.stderr or push_res.stdout})
                     else:
                         self.send_to_electron({"type": "git_action_result", "action": action, "status": "success", "message": res.stdout.strip() or "Done"})
+                    self.get_sessions_list()
                 else:
-                    err_out = res.stderr or res.stdout
+                    err_out = (res.stderr or "") + (res.stdout or "")
                     if "conflict" in err_out.lower() or "diverged" in err_out.lower():
                         self.send_to_electron({"type": "git_conflict", "path": work_dir})
                     else:
@@ -1138,7 +1311,11 @@ class HeadlessAgentView:
 
     def get_sessions_list(self):
         sessions_dir = toolbox.get_storage_path("sessions")
-        files = sorted(glob.glob(os.path.join(sessions_dir, "*.json")), key=os.path.getmtime, reverse=True)
+        all_files = glob.glob(os.path.join(sessions_dir, "*.json"))
+        repo_dir = self.workspace_dir
+        
+        # Sort sessions by Git last-commit timestamp (falling back to mtime for uncommitted/active chats)
+        files = sorted(all_files, key=lambda f: get_file_last_commit_timestamp(f, repo_dir), reverse=True)
         name_map = agent_core.get_session_name_map()
         results = []
         for f in files:
