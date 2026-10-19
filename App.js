@@ -411,42 +411,93 @@ const COMPLETE_CLIENT_HTML = `
         }
         .icon-btn svg { width: 20px; height: 20px; fill: currentColor; }
 
+        .icon-btn.btn-header-stop {
+            padding: 0;
+            transition: transform 0.2s ease, filter 0.2s ease;
+        }
+        .icon-btn.btn-header-stop svg {
+            width: 28px !important;
+            height: 28px !important;
+            fill: none;
+        }
+        .icon-btn.btn-header-stop:hover, .icon-btn.btn-header-stop:active {
+            background: transparent;
+            transform: scale(1.08);
+            filter: drop-shadow(0 0 8px rgba(218, 96, 87, 0.65));
+        }
+
         .model-selector-pill {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 0.35rem 0.8rem;
+            gap: 5px;
+            padding: 0.28rem 0.55rem;
             background: var(--bg-card);
             border: 1px solid var(--border-subtle);
-            border-radius: 20px;
-            font-size: 0.85rem;
+            border-radius: 16px;
+            font-size: 0.78rem;
             font-weight: 600;
             cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+        .model-selector-pill:hover, .model-selector-pill:active {
+            background: var(--bg-hover);
+            border-color: var(--border-focus);
         }
         .model-selector-pill .agent-dot {
-            width: 8px;
-            height: 8px;
+            width: 7px;
+            height: 7px;
             border-radius: 50%;
             background: var(--brand-teal);
+            flex-shrink: 0;
+        }
+        .team-icon-pill {
+            padding: 0.28rem 0.45rem;
         }
 
-        #header-agent-dropdown {
+        #btn-header-new-chat.btn-chat-empty {
+            border: 1.5px dashed var(--brand-teal);
+            color: var(--brand-teal);
+            background: rgba(61, 219, 217, 0.08);
+        }
+        #btn-header-new-chat.btn-chat-nomem {
+            border: 1.5px solid var(--brand-yellow) !important;
+            color: var(--brand-yellow) !important;
+            background: rgba(242, 168, 19, 0.15) !important;
+            box-shadow: 0 0 10px rgba(242, 168, 19, 0.35);
+        }
+        #status-nomem-badge {
+            display: none;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            color: var(--brand-yellow);
+            background: rgba(242, 168, 19, 0.12);
+            border: 1px solid var(--brand-yellow);
+            white-space: nowrap;
+        }
+
+        #header-agent-dropdown, #team-dropdown {
             display: none;
             position: fixed;
-            top: 54px;
-            left: 1rem;
-            width: 280px;
-            max-height: 380px;
+            bottom: calc(env(safe-area-inset-bottom, 16px) + 72px);
+            left: 0.75rem;
+            right: 0.75rem;
+            max-width: 360px;
+            margin: 0 auto;
+            max-height: 48vh;
             background: var(--bg-surface);
             border: 1.5px solid var(--border-focus);
             border-radius: 16px;
-            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.95);
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.92);
             z-index: 2500;
-            padding: 0.75rem;
+            padding: 0.85rem;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
         }
-        #header-agent-dropdown.open { display: flex; }
+        #header-agent-dropdown.open, #team-dropdown.open { display: flex; }
         .dropdown-search-input {
             width: 100%;
             background: var(--bg-card);
@@ -829,29 +880,79 @@ const COMPLETE_CLIENT_HTML = `
 
         .input-capsule {
             background: var(--bg-surface);
-            border: 1.5px solid var(--border-subtle);
-            border-radius: 24px;
-            padding: 0.35rem 0.55rem;
+            border: 1.5px solid var(--active-agent-color, var(--border-subtle));
+            border-radius: 20px;
+            padding: 0.65rem 0.75rem 0.55rem 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            box-shadow: 0 4px 20px var(--active-agent-glow, rgba(0, 0, 0, 0.4));
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        .input-capsule:focus-within {
+            border-color: var(--active-agent-color, var(--brand-primary));
+            box-shadow: 0 4px 24px var(--active-agent-glow-strong, rgba(61, 219, 217, 0.25));
+        }
+
+        .input-text-row {
+            width: 100%;
+            display: flex;
+        }
+
+        #chat-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-main);
+            font-size: 0.92rem;
+            font-family: var(--font-sans);
+            outline: none;
+            user-select: text;
+            -webkit-user-select: text;
+            resize: none;
+            min-height: 24px;
+            max-height: 120px;
+            line-height: 1.45;
+            padding: 2px 4px;
+            margin: 0;
+            display: block;
+        }
+
+        .input-controls-row {
             display: flex;
             align-items: center;
-            gap: 8px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            justify-content: space-between;
+            width: 100%;
+            gap: 4px;
+        }
+
+        .input-controls-left {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .input-controls-right {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            min-width: 0;
         }
 
         .attach-btn {
             position: relative;
             background: var(--bg-card);
-            color: var(--text-main);
+            color: var(--text-muted);
             border: 1px solid var(--border-subtle);
-            width: 34px;
-            height: 34px;
+            width: 30px;
+            height: 30px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             flex-shrink: 0;
-            font-size: 1.3rem;
+            font-size: 1.2rem;
             font-family: var(--font-sans);
             line-height: 1;
             transition: all 0.2s ease;
@@ -873,44 +974,26 @@ const COMPLETE_CLIENT_HTML = `
             cursor: pointer;
             z-index: 10;
         }
-        .input-capsule:focus-within {
-            border-color: var(--brand-primary);
-            box-shadow: 0 4px 20px rgba(61, 219, 217, 0.25);
-        }
-
-        #chat-input {
-            flex: 1;
-            background: transparent;
-            border: none;
-            color: var(--text-main);
-            font-size: 0.92rem;
-            font-family: var(--font-sans);
-            outline: none;
-            user-select: text;
-            -webkit-user-select: text;
-            resize: none;
-            min-height: 22px;
-            max-height: 100px;
-            line-height: 22px;
-            padding: 5px 0;
-            margin: 0;
-            display: block;
-        }
 
         .send-btn {
-            background: var(--brand-primary);
+            background: var(--active-agent-color, var(--brand-primary));
             color: #000;
             border: none;
-            width: 34px;
-            height: 34px;
+            width: 30px;
+            height: 30px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             flex-shrink: 0;
+            transition: all 0.2s ease;
         }
-        .send-btn svg { width: 15px; height: 15px; fill: currentColor; }
+        .send-btn svg { width: 14px; height: 14px; fill: currentColor; }
+        .send-btn.btn-abort-mode, .send-btn.btn-interrupt-mode {
+            background: var(--brand-red, #da6057) !important;
+            color: #ffffff;
+        }
 
         /* Suggestions Popup */
         #suggestions-popup {
@@ -1417,24 +1500,7 @@ const COMPLETE_CLIENT_HTML = `
                 <button class="icon-btn" id="btn-open-drawer" title="Menu">
                     <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
                 </button>
-                
-                <div class="model-selector-pill" id="btn-header-agent-pill">
-                    <span class="agent-dot" id="header-agent-dot"></span>
-                    <span id="header-agent-name">Rita</span>
-                    <span style="font-size: 0.7rem; color: var(--text-dim);">▾</span>
-                </div>
-            </div>
-
-            <div class="header-center">
-                <button class="icon-btn" id="btn-theme-toggle" title="Toggle Light / Dark Mode">
-                    <svg id="theme-moon-icon" viewBox="0 0 24 24" style="display: none;"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>
-                    <svg id="theme-sun-icon" viewBox="0 0 24 24"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 0 0 0-1.41.996.996 0 0 0-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 0 0 0-1.41.996.996 0 0 0-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg>
-                </button>
-            </div>
-
-            <div class="header-right">
-                <span id="status-mode" class="badge-pill mode-plan" title="Click to cycle security permissions">[SAFE]</span>
-                <button class="icon-btn" id="btn-abort" title="Abort">
+                <button class="icon-btn btn-header-stop" id="btn-header-abort" title="Emergency Abort">
                     <svg viewBox="0 0 100 100" style="width: 28px; height: 28px;">
                         <circle cx="50" cy="50" r="48" fill="var(--brand-red, #da6057)"/>
                         <defs>
@@ -1446,12 +1512,23 @@ const COMPLETE_CLIENT_HTML = `
                     </svg>
                 </button>
             </div>
-        </header>
 
-        <div id="header-agent-dropdown">
-            <input type="text" id="header-agent-search" class="dropdown-search-input" placeholder="Search agents...">
-            <div id="dropdown-agents-list" class="dropdown-agents-list"></div>
-        </div>
+            <div class="header-center">
+                <button class="icon-btn" id="btn-theme-toggle" title="Toggle Light / Dark Mode">
+                    <svg id="theme-moon-icon" viewBox="0 0 24 24" style="display: none;"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>
+                    <svg id="theme-sun-icon" viewBox="0 0 24 24"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 0 0 0-1.41.996.996 0 0 0-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 0 0 0-1.41.996.996 0 0 0-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg>
+                </button>
+            </div>
+
+            <div class="header-right">
+                <button class="icon-btn" id="btn-header-termux" title="Open Termux Console">
+                    <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.89 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.89-2-2-2zm0 14H4V8h16v10zm-2-1h-6v-2h6v2zM7.5 17l-1.41-1.41L8.67 13l-2.58-2.59L7.5 9l4 4-4 4z"/></svg>
+                </button>
+                <button class="icon-btn" id="btn-header-new-chat" title="New Conversation">
+                    <svg viewBox="0 0 24 24"><path d="M21.99 6c0-1.1-.89-2-1.99-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4-.01-18zM17 13h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+                </button>
+            </div>
+        </header>
 
         <!-- STREAMING CHAT AREA -->
         <div id="chat-container">
@@ -1482,14 +1559,56 @@ const COMPLETE_CLIENT_HTML = `
             <div id="pending-attachments-bar"></div>
 
             <div class="input-capsule" id="input-capsule-dropzone">
-                <label class="attach-btn" title="Attach file">
-                    +
-                    <input type="file" id="file-picker-input" class="hidden-file-input" multiple>
-                </label>
-                <textarea id="chat-input" rows="1" placeholder='Ask "what can you do?"' autofocus></textarea>
-                <button class="send-btn" id="btn-send" title="Send (Enter)">
-                    <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-                </button>
+                <div class="input-text-row">
+                    <textarea id="chat-input" rows="1" placeholder='Ask "what can you do?", @agent, or !command' autofocus></textarea>
+                </div>
+
+                <div class="input-controls-row">
+                    <div class="input-controls-left">
+                        <label class="attach-btn" title="Attach file">
+                            +
+                            <input type="file" id="file-picker-input" class="hidden-file-input" multiple>
+                        </label>
+                    </div>
+
+                    <div class="input-controls-right">
+                        <!-- Team Switcher Icon-Only Pill & Dropdown -->
+                        <div style="position: relative;">
+                            <div class="model-selector-pill team-icon-pill" id="btn-team-pill" title="Switch Team Workspace">
+                                <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: currentColor; flex-shrink: 0;"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                                <span style="font-size: 0.65rem; color: var(--text-dim);">▾</span>
+                            </div>
+
+                            <div id="team-dropdown">
+                                <input type="text" id="team-dropdown-search" class="dropdown-search-input" placeholder="Search teams...">
+                                <div id="dropdown-teams-list" class="dropdown-agents-list"></div>
+                                <button class="modal-btn btn-secondary" id="btn-dropdown-manage-teams" style="width: 100%; margin-top: 4px; padding: 6px 10px; font-size: 0.78rem;">Manage Teams</button>
+                            </div>
+                        </div>
+
+                        <!-- Agent Switcher Pill & Dropdown -->
+                        <div style="position: relative;">
+                            <div class="model-selector-pill" id="btn-header-agent-pill" title="Select agent">
+                                <span class="agent-dot" id="header-agent-dot"></span>
+                                <span id="header-agent-name">Rita</span>
+                                <span style="font-size: 0.65rem; color: var(--text-dim);">▾</span>
+                            </div>
+
+                            <div id="header-agent-dropdown">
+                                <input type="text" id="header-agent-search" class="dropdown-search-input" placeholder="Search agents...">
+                                <div id="dropdown-agents-list" class="dropdown-agents-list"></div>
+                                <button class="modal-btn btn-secondary" id="btn-dropdown-manage-agents" style="width: 100%; margin-top: 4px; padding: 6px 10px; font-size: 0.78rem;">Add Agent</button>
+                            </div>
+                        </div>
+
+                        <span id="status-nomem-badge">[NO MEMORY]</span>
+                        <span id="status-mode" class="badge-pill mode-plan" title="Click to cycle security permissions">[SAFE]</span>
+
+                        <button class="send-btn" id="btn-send" title="Send (Enter)">
+                            <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </main>
@@ -2862,9 +2981,97 @@ const COMPLETE_CLIENT_HTML = `
             }
         }, { passive: false });
 
+        function renderTeamDropdown(filter) {
+            const listEl = document.getElementById('dropdown-teams-list');
+            if (!listEl) return;
+            listEl.innerHTML = '';
+            const q = (filter || '').toLowerCase().trim();
+            const filtered = (cachedTeams || []).filter(function(t) {
+                return (t.name || '').toLowerCase().includes(q) || (t.path || '').toLowerCase().includes(q);
+            });
+
+            if (filtered.length === 0) {
+                listEl.innerHTML = '<div style="color:var(--text-dim); font-size:0.8rem; padding:8px; text-align:center;">No teams found</div>';
+                return;
+            }
+
+            filtered.forEach(function(t) {
+                const isActive = !!t.is_active;
+                const item = document.createElement('div');
+                item.className = 'dropdown-agent-item ' + (isActive ? 'active' : '');
+                item.innerHTML = '<div style="display:flex; align-items:center; gap:8px; overflow:hidden; min-width:0;">' +
+                    '<span style="font-size:0.85rem; flex-shrink:0;">📁</span>' +
+                    '<div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' +
+                        '<div style="font-weight:' + (isActive ? '700' : '500') + '; color:' + (isActive ? 'var(--brand-teal)' : 'var(--text-main)') + '; font-size:0.82rem; text-overflow:ellipsis; overflow:hidden;">' + window.electronAPI.escapeHtml(t.name) + '</div>' +
+                        '<div style="font-size:0.68rem; color:var(--text-dim); text-overflow:ellipsis; overflow:hidden;">' + window.electronAPI.escapeHtml(t.path) + '</div>' +
+                    '</div>' +
+                '</div>' +
+                (isActive ? '<span style="font-size:0.75rem; color:var(--brand-teal); font-weight:bold; flex-shrink:0; margin-left:6px;">✓</span>' : '');
+
+                item.onclick = function(e) {
+                    e.stopPropagation();
+                    if (!isActive) {
+                        sendToPython({ action: "switch_team", path: t.path, name: t.name });
+                    }
+                    const teamDd = document.getElementById('team-dropdown');
+                    if (teamDd) teamDd.classList.remove('open');
+                };
+
+                listEl.appendChild(item);
+            });
+        }
+
+        const btnTeamPill = document.getElementById('btn-team-pill');
+        if (btnTeamPill) {
+            btnTeamPill.onclick = function(e) {
+                e.stopPropagation();
+                headerAgentDropdown.classList.remove('open');
+                const teamDd = document.getElementById('team-dropdown');
+                if (teamDd) {
+                    teamDd.classList.toggle('open');
+                    if (teamDd.classList.contains('open')) {
+                        sendToPython({ action: "get_teams" });
+                        const searchInput = document.getElementById('team-dropdown-search');
+                        renderTeamDropdown(searchInput ? searchInput.value : "");
+                        if (searchInput) searchInput.focus();
+                    }
+                }
+            };
+        }
+
+        const teamSearchInput = document.getElementById('team-dropdown-search');
+        if (teamSearchInput) {
+            teamSearchInput.addEventListener('input', function(e) {
+                renderTeamDropdown(e.target.value);
+            });
+        }
+
+        const btnManageTeamsDropdown = document.getElementById('btn-dropdown-manage-teams');
+        if (btnManageTeamsDropdown) {
+            btnManageTeamsDropdown.onclick = function(e) {
+                e.stopPropagation();
+                const teamDd = document.getElementById('team-dropdown');
+                if (teamDd) teamDd.classList.remove('open');
+                openTeamsModal();
+            };
+        }
+
+        const btnManageAgentsDropdown = document.getElementById('btn-dropdown-manage-agents');
+        if (btnManageAgentsDropdown) {
+            btnManageAgentsDropdown.onclick = function(e) {
+                e.stopPropagation();
+                headerAgentDropdown.classList.remove('open');
+                openAgentConfig();
+            };
+        }
+
         document.addEventListener('click', (e) => {
             if (!e.target.closest('#btn-header-agent-pill') && !e.target.closest('#header-agent-dropdown')) {
                 headerAgentDropdown.classList.remove('open');
+            }
+            if (!e.target.closest('#btn-team-pill') && !e.target.closest('#team-dropdown')) {
+                const teamDd = document.getElementById('team-dropdown');
+                if (teamDd) teamDd.classList.remove('open');
             }
             const link = e.target.closest('a');
             if (link && link.href) {
@@ -2913,13 +3120,98 @@ const COMPLETE_CLIENT_HTML = `
 
         initTheme();
 
-        document.getElementById('btn-abort').onclick = () => {
+        function updateSendButtonState() {
+            const btn = document.getElementById('btn-send');
+            if (!btn) return;
+            const isWorking = workingAgentsMap.size > 0;
+            const hasText = (chatInput.value.trim().length > 0 || (pendingAttachments && pendingAttachments.length > 0));
+
+            btn.classList.remove('btn-abort-mode', 'btn-interrupt-mode');
+
+            if (isWorking && !hasText) {
+                btn.classList.add('btn-abort-mode');
+                btn.title = "Abort Execution";
+                btn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>';
+            } else if (isWorking && hasText) {
+                btn.classList.add('btn-interrupt-mode');
+                btn.title = "Interrupt & Override";
+                btn.innerHTML = '<svg viewBox="0 0 100 100" style="width: 18px; height: 18px;">' +
+                    '<defs><path id="interrupt-arrow-seg" d="M 77.2 27.2 A 35.5 35.5 0 0 1 77.2 72.8 L 83.6 74.4 L 66.7 76.7 L 65.2 65.2 L 71.1 67.7 A 27.5 27.5 0 0 0 71.1 32.3 Z" fill="currentColor"/></defs>' +
+                    '<use href="#interrupt-arrow-seg"/>' +
+                    '<use href="#interrupt-arrow-seg" transform="rotate(120 50 50)"/>' +
+                    '<use href="#interrupt-arrow-seg" transform="rotate(240 50 50)"/>' +
+                '</svg>';
+            } else {
+                btn.title = "Send";
+                btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
+            }
+        }
+
+        const triggerAbort = function() {
             sendToPython({ action: "abort" });
             workingAgentsMap.clear();
             workingIndicator.style.display = "none";
             stopReactorAnimation();
+            updateSendButtonState();
             appendLog("[bold red]Operation Aborted by User.[/bold red]", false);
         };
+
+        let isChatEmpty = true;
+        let isNoMemorySession = false;
+
+        function updateNewChatButtonState() {
+            const btn = document.getElementById('btn-header-new-chat');
+            const nomemBadge = document.getElementById('status-nomem-badge');
+            if (!btn) return;
+
+            btn.classList.remove('btn-chat-empty', 'btn-chat-nomem');
+
+            if (nomemBadge) {
+                nomemBadge.style.display = isNoMemorySession ? 'inline-block' : 'none';
+            }
+
+            if (isChatEmpty) {
+                if (isNoMemorySession) {
+                    btn.classList.add('btn-chat-nomem');
+                    btn.title = "No-Memory Session Active (Click to toggle Normal)";
+                } else {
+                    btn.classList.add('btn-chat-empty');
+                    btn.title = "Empty Chat (Click to toggle No-Memory Session)";
+                }
+            } else {
+                btn.title = isNoMemorySession ? "New Conversation (Current: No-Memory)" : "New Conversation";
+            }
+        }
+
+        const btnHeaderAbort = document.getElementById('btn-header-abort') || document.getElementById('btn-abort');
+        if (btnHeaderAbort) {
+            btnHeaderAbort.onclick = triggerAbort;
+        }
+
+        const btnHeaderTermux = document.getElementById('btn-header-termux');
+        if (btnHeaderTermux) {
+            btnHeaderTermux.onclick = function() {
+                if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({ type: "_open_termux_console" }));
+                }
+            };
+        }
+
+        const btnHeaderNewChat = document.getElementById('btn-header-new-chat');
+        if (btnHeaderNewChat) {
+            btnHeaderNewChat.onclick = function() {
+                if (isChatEmpty) {
+                    isNoMemorySession = !isNoMemorySession;
+                    sendToPython({ action: "clear_all", no_memory: isNoMemorySession });
+                    updateNewChatButtonState();
+                } else {
+                    isNoMemorySession = false;
+                    sendToPython({ action: "clear_all", no_memory: false });
+                    isChatEmpty = true;
+                    updateNewChatButtonState();
+                }
+            };
+        }
 
         function openMcpModal() {
             const logEl = document.getElementById('mcp-console-log');
@@ -3530,6 +3822,10 @@ const COMPLETE_CLIENT_HTML = `
                         break;
 
                     case "status_bar":
+                        if (msg.is_nomem !== undefined) {
+                            isNoMemorySession = !!msg.is_nomem;
+                            updateNewChatButtonState();
+                        }
                         updateStatusBar(msg);
                         break;
 
@@ -3546,6 +3842,11 @@ const COMPLETE_CLIENT_HTML = `
                         workingAgentsMap.clear();
                         workingIndicator.style.display = "none";
                         stopReactorAnimation();
+                        isChatEmpty = true;
+                        if (msg.is_nomem !== undefined) {
+                            isNoMemorySession = !!msg.is_nomem;
+                        }
+                        updateNewChatButtonState();
                         chatContainer.scrollTop = 0;
                         break;
 
@@ -3811,6 +4112,11 @@ const COMPLETE_CLIENT_HTML = `
             const dot = document.getElementById('header-agent-dot');
             if (label) label.innerText = name;
             if (dot && color) dot.style.background = color;
+
+            const safeColor = color || '#3ddbd9';
+            document.documentElement.style.setProperty('--active-agent-color', safeColor);
+            document.documentElement.style.setProperty('--active-agent-glow', hexToRgba(safeColor, 0.15));
+            document.documentElement.style.setProperty('--active-agent-glow-strong', hexToRgba(safeColor, 0.35));
         }
 
         let currentAgentMode = "PLAN";
@@ -3851,11 +4157,19 @@ const COMPLETE_CLIENT_HTML = `
         }
 
         function appendLog(text, isMarkdown) {
+            const clean = stripRichTags(text);
+            if (clean.includes("ALL CONTEXTS CLEARED") || clean.includes("Fresh multiagent session") || clean.includes("Fresh NO-MEMORY session")) {
+                if (welcomeHero) welcomeHero.style.display = 'block';
+                isChatEmpty = true;
+                updateNewChatButtonState();
+                return;
+            }
+            isChatEmpty = false;
+            updateNewChatButtonState();
             const div = document.createElement('div');
             div.style.color = 'var(--text-dim)';
             div.style.fontSize = '0.8rem';
             div.style.margin = '0.3rem 0';
-            const clean = stripRichTags(text);
             div.innerHTML = isMarkdown ? renderMarkdownText(clean) : window.electronAPI.escapeHtml(clean).replace(/\\n/g, '<br>');
             chatContainer.appendChild(div);
             applyLatexPass(div);

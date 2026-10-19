@@ -455,10 +455,13 @@ class HeadlessAgentView:
         return text
 
     def update_status_bar(self):
+        is_nomem = False
+        if hasattr(self, "session_manager") and hasattr(self.session_manager, "is_no_memory"):
+            is_nomem = self.session_manager.is_no_memory()
         self.send_to_electron({
             "type": "status_bar", "mode": self.agent_mode, "agent": self.active_agent.name,
             "agent_color": self.active_agent.color, "tokens": self.current_tokens,
-            "model": self.active_agent.model, "cwd": self.workspace_dir
+            "model": self.active_agent.model, "cwd": self.workspace_dir, "is_nomem": is_nomem
         })
 
     def update_tokens(self):
@@ -692,13 +695,17 @@ class HeadlessAgentView:
         except Exception as e:
             self.log_to_ui(f"[bold red]Failed to save schedule:[/bold red] {e}")
 
-    def action_clear_all_contexts(self):
+    def action_clear_all_contexts(self, no_memory: bool = False):
         self.action_abort()
-        self.session_manager.clear_all_contexts()
+        self.session_manager.clear_all_contexts(no_memory=no_memory)
+        default_name = self.agent_manager.get_default_agent_name()
+        if default_name:
+            self.select_agent(default_name)
         self.agent_mode = "PLAN"
         self.current_tokens = 0
-        self.send_to_electron({"type": "clear_chat"})
-        self.log_to_ui("[bold yellow]ALL CONTEXTS CLEARED. Fresh multiagent session started.[/bold yellow]")
+        self.send_to_electron({"type": "clear_chat", "is_nomem": no_memory})
+        msg = "ALL CONTEXTS CLEARED. Fresh NO-MEMORY session started." if no_memory else "ALL CONTEXTS CLEARED. Fresh multiagent session started."
+        self.log_to_ui(f"[bold yellow]{msg}[/bold yellow]")
         self.update_status_bar()
 
     def perform_autocommit(self, agent_name="Agent"):
@@ -1693,7 +1700,8 @@ def handle_client_message(view, data):
     elif action == "abort":
         view.action_abort()
     elif action == "clear_all":
-        view.action_clear_all_contexts()
+        no_mem = bool(data.get("no_memory", False))
+        view.action_clear_all_contexts(no_memory=no_mem)
     elif action == "select_agent":
         view.select_agent(data.get("name"))
     elif action == "set_mode":
