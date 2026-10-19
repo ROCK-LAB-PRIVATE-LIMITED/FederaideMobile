@@ -76,7 +76,7 @@ def _patched_sub(pattern, repl, string, count=0, flags=0):
         return BypassStr(string)
     if pattern == r'data:image/[a-zA-Z]+;base64,[A-Za-z0-9+/=\s]{20,}' and repl == '<base64_data_omitted>':
         return BypassStr(string)
-    return _orig_sub(pattern, repl, string, count, flags)
+    return _orig_sub(pattern, repl, string, count=count, flags=flags)
 
 re.sub = _patched_sub
 # --------------------------------------------------------------------------
@@ -400,12 +400,12 @@ class HeadlessAgentView:
                 env = os.environ.copy()
                 env["GIT_TERMINAL_PROMPT"] = "0"
 
-                # Check if there are uncommitted changes
+                # 1. Check if there are uncommitted changes
                 status_res = subprocess.run(["git", "status", "--porcelain"], cwd=work_dir, capture_output=True, text=True, timeout=15, env=env)
                 if not status_res.stdout.strip():
                     return
 
-                # Ensure git user identity is configured
+                # 2. Configure git identity if missing
                 check_name = subprocess.run(["git", "config", "user.name"], cwd=work_dir, capture_output=True, text=True, timeout=5, env=env)
                 if not check_name.stdout.strip():
                     user_cfg = toolbox.load_global_settings()
@@ -413,13 +413,23 @@ class HeadlessAgentView:
                     subprocess.run(["git", "config", "user.name", u_name], cwd=work_dir, timeout=5, env=env)
                     subprocess.run(["git", "config", "user.email", "agent@federaide.local"], cwd=work_dir, timeout=5, env=env)
 
-                # Stage and commit
+                # 3. Stage and commit silently
                 subprocess.run(["git", "add", "-A"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
                 msg = f"FEDERaiDE autocommit: {agent_name} completed turn ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})"
                 commit_res = subprocess.run(["git", "commit", "-m", msg], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+
                 if commit_res.returncode == 0:
-                    self.log_to_ui(f"[dim green]✓ Auto-committed turn changes ({agent_name}).[/dim green]")
                     self.get_sessions_list()
+
+                    # 4. Silent background auto-push if a remote is configured (matching FEDERaiDE TUI)
+                    check_remote = subprocess.run(["git", "remote"], cwd=work_dir, capture_output=True, text=True, timeout=5, env=env)
+                    if check_remote.stdout.strip():
+                        auth_args = get_git_auth_header_args(work_dir)
+                        push_res = subprocess.run(["git"] + auth_args + ["push"], cwd=work_dir, capture_output=True, text=True, timeout=60, env=env)
+                        if push_res.returncode != 0:
+                            err_str = (push_res.stderr or push_res.stdout or "")
+                            if "conflict" in err_str.lower() or "diverged" in err_str.lower():
+                                self.send_to_electron({"type": "git_conflict", "path": work_dir})
             except Exception:
                 pass
 
@@ -810,7 +820,14 @@ class HeadlessAgentView:
 
         if not acting_agents: acting_agents.append(self.active_agent)
 
+        # Preserve the existing conversation ID so mentions (@gordon) stay in the current thread
+        shared_session_id = getattr(self.session_manager, "current_session_id", None)
+        if not shared_session_id:
+            shared_session_id = f"sess_{int(time.time())}"
+            self.session_manager.current_session_id = shared_session_id
+
         for a in acting_agents:
+            self.session_manager.current_session_id = shared_session_id
             self.session_manager.init_agent_session(a, all_agents_list)
             self.session_manager.join_conversation(self.active_agent.name, a, all_agents_list)
 
@@ -1375,16 +1392,49 @@ class HeadlessAgentView:
         all_files = glob.glob(os.path.join(sessions_dir, "*.json"))
         repo_dir = self.workspace_dir
 
-        # Sort sessions by Git last-commit timestamp (falls back to mtime for uncommitted/active chats)
-        files = sorted(all_files, key=lambda f: get_file_commit_or_mtime(f, repo_dir), reverse=True)
-        name_map = agent_core.get_session_name_map()
-        results = []
-        for f in files:
-            base = os.path.basename(f).replace(".json", "")
+        # Group agent session history files by logical conversation session ID
+        grouped_sessions = {}
+        for f in all_files:
+            fname = os.path.basename(f)
+            if fname in ("session_names.json", "sessions.json"):
+                continue
+
+            base = fname.replace(".json", "")
             parts = base.split("_")
-            sess_id = f"{parts[0]}_{parts[1]}" if len(parts) >= 2 else ""
-            friendly = name_map.get(sess_id, base)
-            results.append({"path": f, "name": friendly, "id": sess_id})
+            if len(parts) >= 2 and parts[0] == "sess":
+                sess_id = f"{parts[0]}_{parts[1]}"
+            else:
+                sess_id = base
+
+            ts = get_file_commit_or_mtime(f, repo_dir)
+            if sess_id not in grouped_sessions or ts > grouped_sessions[sess_id]["timestamp"]:
+                grouped_sessions[sess_id] = {
+                    "path": f,
+                    "timestamp": ts,
+                    "id": sess_id,
+                    "base": base
+                }
+
+        # Order unique conversations by last Git commit timestamp (latest conversation on top)
+        sorted_groups = sorted(grouped_sessions.values(), key=lambda x: x["timestamp"], reverse=True)
+
+        name_map = {}
+        try:
+            name_map = agent_core.get_session_name_map()
+        except Exception:
+            pass
+
+        results = []
+        for item in sorted_groups:
+            sess_id = item["id"]
+            # Check name_map for session title, falling back to clean identifier
+            friendly = name_map.get(sess_id) or name_map.get(item["base"]) or sess_id
+            results.append({
+                "path": item["path"],
+                "name": friendly,
+                "id": sess_id
+            })
+
         self.send_to_electron({"type": "sessions_list_data", "sessions": results})
 
     def get_schedules_data(self):
