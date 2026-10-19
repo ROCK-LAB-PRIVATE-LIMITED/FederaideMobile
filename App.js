@@ -194,6 +194,31 @@ const COMPLETE_CLIENT_HTML = `
             display: flex;
         }
 
+        ::view-transition {
+            pointer-events: none !important;
+        }
+        ::view-transition-old(root),
+        ::view-transition-new(root) {
+            animation: none;
+            mix-blend-mode: normal;
+        }
+        ::view-transition-old(root) {
+            z-index: 1;
+        }
+        ::view-transition-new(root) {
+            z-index: 9999;
+            animation: vt-circle-reveal 500ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+
+        @keyframes vt-circle-reveal {
+            0% {
+                clip-path: circle(0px at 50% 28px);
+            }
+            100% {
+                clip-path: circle(3000px at 50% 28px);
+            }
+        }
+
         /* --- SIDEBAR / DRAWER --- */
         #sidebar-overlay {
             position: fixed;
@@ -2874,7 +2899,16 @@ const COMPLETE_CLIENT_HTML = `
 
         document.getElementById('btn-theme-toggle').onclick = () => {
             const current = document.documentElement.getAttribute('data-theme') || 'dark';
-            applyTheme(current === 'dark' ? 'light' : 'dark');
+            const nextTheme = current === 'dark' ? 'light' : 'dark';
+
+            if (!document.startViewTransition) {
+                applyTheme(nextTheme);
+                return;
+            }
+
+            document.startViewTransition(() => {
+                applyTheme(nextTheme);
+            });
         };
 
         initTheme();
