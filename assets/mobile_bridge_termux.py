@@ -91,6 +91,46 @@ def get_safe_starting_dir() -> str:
     p.mkdir(parents=True, exist_ok=True)
     return str(p.absolute())
 
+def get_active_team_storage_dir(team_path):
+    if not team_path or os.path.abspath(team_path) == os.path.abspath(get_safe_starting_dir()):
+        return FEDERATE_DIR
+
+    # 1. Check if the repo has a .federate folder with agents or sessions
+    dot_fed = os.path.join(team_path, ".federate")
+    if os.path.isdir(dot_fed) and (os.path.isdir(os.path.join(dot_fed, "agents")) or os.path.isdir(os.path.join(dot_fed, "sessions"))):
+        return dot_fed
+
+    # 2. Check if the repo has agents/ or sessions/ directly in its root
+    if os.path.isdir(os.path.join(team_path, "agents")) or os.path.isdir(os.path.join(team_path, "sessions")):
+        return team_path
+
+    # 3. Fallback: if .federate directory exists, use it; otherwise use team root
+    return dot_fed if os.path.isdir(dot_fed) else team_path
+
+# Hook toolbox path resolution to dynamically bind to the active team workspace
+_orig_get_team_dir = getattr(toolbox, "get_team_dir", None)
+_orig_get_storage_path = getattr(toolbox, "get_storage_path", None)
+
+def _dynamic_get_team_dir():
+    view = getattr(toolbox, "CURRENT_AGENT_VIEW", None)
+    if view and getattr(view, "active_team_path", None):
+        return get_active_team_storage_dir(view.active_team_path)
+    if os.environ.get("FEDERATE_TEAM_DIR"):
+        return os.environ["FEDERATE_TEAM_DIR"]
+    return FEDERATE_DIR
+
+def _dynamic_get_storage_path(*parts):
+    base_dir = _dynamic_get_team_dir()
+    target = os.path.join(base_dir, *parts)
+    if len(parts) > 0 and not os.path.splitext(parts[-1])[1]:
+        os.makedirs(target, exist_ok=True)
+    elif len(parts) > 1:
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+    return target
+
+toolbox.get_team_dir = _dynamic_get_team_dir
+toolbox.get_storage_path = _dynamic_get_storage_path
+
 # --- MOCK WIDGET & APPLICATION BRIDGE ---
 class MockDirTree:
     def __init__(self, view):
@@ -161,7 +201,6 @@ class AppMock:
 # --- HEADLESS AGENT VIEW CONTROLLER ---
 class HeadlessAgentView:
     def __init__(self):
-        # 1. Restore the last active team workspace if saved in teams.json
         initial_dir = get_safe_starting_dir()
         try:
             teams_path = os.path.join(FEDERATE_DIR, "teams.json")
@@ -176,6 +215,7 @@ class HeadlessAgentView:
             pass
 
         self.workspace_dir = initial_dir
+        self.active_team_path = initial_dir
         try: os.chdir(self.workspace_dir)
         except Exception: pass
 
@@ -185,9 +225,17 @@ class HeadlessAgentView:
         toolbox.CURRENT_AGENT_VIEW = self
         toolbox.CURRENT_LOG_CB = self.log_to_ui
 
+        # Point environment variables to active team storage directory
+        active_storage = get_active_team_storage_dir(self.active_team_path)
+        os.environ["FEDERATE_TEAM_DIR"] = active_storage
+        os.environ["FEDERAIDE_TEAM_DIR"] = active_storage
+        self.team_dir = active_storage
+        self.app.team_dir = active_storage
+
         self.agent_manager = AgentManager()
         self.session_manager = SessionManager()
         self.schedule_manager = ScheduleManager()
+        migrate_legacy_agent_keys()
         self.telegram_manager = None
         self.current_telegram_chat_id = None
         self.last_screenshot_path = None
@@ -724,29 +772,42 @@ class HeadlessAgentView:
     def switch_team(self, path, name):
         if not path or not os.path.exists(path):
             os.makedirs(path, exist_ok=True)
-        self.set_directory(path)
+        abs_path = os.path.abspath(path)
+        self.workspace_dir = abs_path
+        self.active_team_path = abs_path
+        try: os.chdir(abs_path)
+        except Exception: pass
 
         teams = self.load_teams_registry()
         for t in teams:
-            t["is_active"] = (os.path.abspath(t.get("path", "")) == os.path.abspath(path))
+            t["is_active"] = (os.path.abspath(t.get("path", "")) == abs_path)
         self.save_teams_registry(teams)
 
-        # 1. Reload managers so they bind to the newly selected team workspace
+        # 1. Update storage directory routing to the selected team repository
+        active_storage = get_active_team_storage_dir(abs_path)
+        os.environ["FEDERATE_TEAM_DIR"] = active_storage
+        os.environ["FEDERAIDE_TEAM_DIR"] = active_storage
+        self.team_dir = active_storage
+        self.app.team_dir = active_storage
+
+        # 2. Re-instantiate managers so they load agents and sessions from the team repository
         self.agent_manager = AgentManager()
         self.session_manager = SessionManager()
         self.schedule_manager = ScheduleManager()
         migrate_legacy_agent_keys()
 
-        # 2. Select default agent for the switched team
-        default_name = self.agent_manager.get_default_agent_name()
-        self.active_agent = self.agent_manager.get_agent(default_name) or list(self.agent_manager.agents.values())[0]
+        # 3. Select default agent from the team's loaded agents
+        agents_list = list(self.agent_manager.agents.values())
+        if agents_list:
+            default_name = self.agent_manager.get_default_agent_name()
+            self.active_agent = self.agent_manager.get_agent(default_name) or agents_list[0]
 
-        # 3. Reset active context and tokens
+        # 4. Clear active chat buffer and update status
         self.current_tokens = 0
         self.send_to_electron({"type": "clear_chat"})
         self.update_status_bar()
 
-        # 4. Push updated agents, conversations, and schedules to the UI
+        # 5. Broadcast newly loaded agents, conversations list, and schedules to UI
         self.send_to_electron({
             "type": "init",
             "session_token": self.session_token,
@@ -757,7 +818,7 @@ class HeadlessAgentView:
         self.get_sessions_list()
         self.get_schedules_data()
         self.get_teams_data()
-        self.log_to_ui(f"[bold green]Switched to team workspace:[/] {name}")
+        self.log_to_ui(f"[bold green]Switched to team workspace:[/] {name} ({abs_path})")
 
     def save_team(self, fields):
         name = fields.get("name", "").strip() or "Workspace"
