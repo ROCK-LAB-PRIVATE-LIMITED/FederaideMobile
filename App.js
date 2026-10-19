@@ -455,14 +455,22 @@ const COMPLETE_CLIENT_HTML = `
             padding: 0.28rem 0.45rem;
         }
 
+        :root {
+            --nomem-color: #f2a813; /* <-- ONE-LINER: Change this color to change both button & badge */
+        }
+
         #btn-header-new-chat.btn-chat-empty {
-            border: 1.5px dashed var(--brand-teal);
-            color: var(--brand-teal);
-            background: rgba(61, 219, 217, 0.08);
+            border: 1.5px dotted var(--text-muted);
+            color: var(--text-muted);
+            background: transparent;
+        }
+        #btn-header-new-chat.btn-chat-empty:hover {
+            border-color: var(--text-main);
+            color: var(--text-main);
         }
         #btn-header-new-chat.btn-chat-nomem {
-            border: 1.5px solid var(--brand-yellow) !important;
-            color: var(--brand-yellow) !important;
+            border: 1.5px solid var(--nomem-color) !important;
+            color: var(--nomem-color) !important;
             background: rgba(242, 168, 19, 0.15) !important;
             box-shadow: 0 0 10px rgba(242, 168, 19, 0.35);
         }
@@ -473,9 +481,9 @@ const COMPLETE_CLIENT_HTML = `
             font-size: 0.68rem;
             font-weight: 700;
             font-family: var(--font-mono);
-            color: var(--brand-yellow);
+            color: var(--nomem-color);
             background: rgba(242, 168, 19, 0.12);
-            border: 1px solid var(--brand-yellow);
+            border: 1px solid var(--nomem-color);
             white-space: nowrap;
         }
 
