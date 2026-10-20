@@ -1590,7 +1590,6 @@ const COMPLETE_CLIENT_HTML = `
                             </div>
 
                             <div id="team-dropdown">
-                                <input type="text" id="team-dropdown-search" class="dropdown-search-input" placeholder="Search teams...">
                                 <div id="dropdown-teams-list" class="dropdown-agents-list"></div>
                                 <button class="modal-btn btn-secondary" id="btn-dropdown-manage-teams" style="width: 100%; margin-top: 4px; padding: 6px 10px; font-size: 0.78rem;">Manage Teams</button>
                             </div>
@@ -1605,7 +1604,6 @@ const COMPLETE_CLIENT_HTML = `
                             </div>
 
                             <div id="header-agent-dropdown">
-                                <input type="text" id="header-agent-search" class="dropdown-search-input" placeholder="Search agents...">
                                 <div id="dropdown-agents-list" class="dropdown-agents-list"></div>
                                 <button class="modal-btn btn-secondary" id="btn-dropdown-manage-agents" style="width: 100%; margin-top: 4px; padding: 6px 10px; font-size: 0.78rem;">Add Agent</button>
                             </div>
@@ -3047,19 +3045,10 @@ const COMPLETE_CLIENT_HTML = `
                     teamDd.classList.toggle('open');
                     if (teamDd.classList.contains('open')) {
                         sendToPython({ action: "get_teams" });
-                        const searchInput = document.getElementById('team-dropdown-search');
-                        renderTeamDropdown(searchInput ? searchInput.value : "");
-                        if (searchInput) searchInput.focus();
+                        renderTeamDropdown("");
                     }
                 }
             };
-        }
-
-        const teamSearchInput = document.getElementById('team-dropdown-search');
-        if (teamSearchInput) {
-            teamSearchInput.addEventListener('input', function(e) {
-                renderTeamDropdown(e.target.value);
-            });
         }
 
         const btnManageTeamsDropdown = document.getElementById('btn-dropdown-manage-teams');
@@ -3294,7 +3283,7 @@ const COMPLETE_CLIENT_HTML = `
                         if (navigator.vibrate) navigator.vibrate([40, 60]);
                         defaultAgentName = a.name;
                         sendToPython({ action: "set_default_agent", name: a.name });
-                        renderHeaderAgentDropdown(headerAgentSearch ? headerAgentSearch.value : "");
+                        renderHeaderAgentDropdown("");
                     }, 500);
                 }
 
@@ -3333,7 +3322,7 @@ const COMPLETE_CLIENT_HTML = `
                     if (navigator.vibrate) navigator.vibrate([40, 60]);
                     defaultAgentName = a.name;
                     sendToPython({ action: "set_default_agent", name: a.name });
-                    renderHeaderAgentDropdown(headerAgentSearch ? headerAgentSearch.value : "");
+                    renderHeaderAgentDropdown("");
                 };
 
                 dropdownAgentsList.appendChild(item);
@@ -3355,12 +3344,9 @@ const COMPLETE_CLIENT_HTML = `
             if (headerAgentDropdown.classList.contains('open')) {
                 sendToPython({ action: "get_status" });
                 sendToPython({ action: "get_agent_data" });
-                renderHeaderAgentDropdown(headerAgentSearch.value);
-                headerAgentSearch.focus();
+                renderHeaderAgentDropdown("");
             }
         };
-
-        headerAgentSearch.addEventListener('input', (e) => renderHeaderAgentDropdown(e.target.value));
 
         // Drawer Controls
         document.getElementById('btn-open-drawer').onclick = () => toggleDrawer(true);
@@ -3437,8 +3423,7 @@ const COMPLETE_CLIENT_HTML = `
 
         function renderTeamsUI(data) {
             cachedTeams = data.teams || [];
-            const searchInput = document.getElementById('team-dropdown-search');
-            renderTeamDropdown(searchInput ? searchInput.value : "");
+            renderTeamDropdown("");
 
             const listEl = document.getElementById('teams-list-container');
             if (!listEl) return;
@@ -3732,7 +3717,7 @@ const COMPLETE_CLIENT_HTML = `
                         }
                         const currentAgent = cachedAgents.find(a => a.name === activeAgentName);
                         updateHeaderAgentPill(activeAgentName, currentAgent ? currentAgent.color : null);
-                        renderHeaderAgentDropdown(headerAgentSearch.value);
+                        renderHeaderAgentDropdown("");
 
                         if (msg.needs_onboarding) {
                             showOnboardingModal();
@@ -3784,7 +3769,7 @@ const COMPLETE_CLIENT_HTML = `
 
                     case "default_agent_set":
                         defaultAgentName = msg.name;
-                        renderHeaderAgentDropdown(headerAgentSearch ? headerAgentSearch.value : "");
+                        renderHeaderAgentDropdown("");
                         break;
 
                     case "open_external_url":
@@ -4010,8 +3995,7 @@ const COMPLETE_CLIENT_HTML = `
                     case "teams_data":
                         cachedTeams = msg.teams || [];
                         renderTeamsUI(msg);
-                        const teamSearchEl = document.getElementById('team-dropdown-search');
-                        renderTeamDropdown(teamSearchEl ? teamSearchEl.value : "");
+                        renderTeamDropdown("");
                         break;
 
                     case "git_conflict":
