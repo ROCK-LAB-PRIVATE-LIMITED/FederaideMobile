@@ -24,7 +24,7 @@ IS_ARM=false
 FEDERAIDE_VERSION="${FEDERAIDE_VERSION:-2.0.8}"
 
 # Detect Termux (Android)
-if [ -d "/data/data/com.termux" ] || [ -n "$PREFIX" ] || [ -d "$HOME" ]; then
+if [ -d "/data/data/in.rocklab.federaide" ] || [ -n "$PREFIX" ] || [ -d "$HOME" ]; then
     IS_TERMUX=true
 fi
 
@@ -183,12 +183,39 @@ EOF
         export UV_COMPILE_BYTECODE=0
         export UV_INDEX_STRATEGY=unsafe-first-match
 
-        # Ensure libpython symbols are available (libpython LD_PRELOAD)
-        for prof in "$HOME/.bashrc" "$HOME/.profile" "/data/data/com.termux/files/usr/etc/profile"; do
-            [ -f "$prof" ] && ! grep -q "libpython3.13.so" "$prof" 2>/dev/null && \
-                echo 'export LD_PRELOAD="/data/data/com.termux/files/usr/lib/libpython3.13.so${LD_PRELOAD:+:$LD_PRELOAD}"' >> "$prof"
+        # Ensure python executable and PYO3_PYTHON are set for maturin/cargo builds
+        PYTHON_BIN="$(command -v python3.13 || command -v python3 || command -v python || true)"
+        if [ -n "$PYTHON_BIN" ]; then
+            export PYO3_PYTHON="$PYTHON_BIN"
+            BIN_DIR="$(dirname "$PYTHON_BIN")"
+            [ ! -f "$BIN_DIR/python" ] && ln -sf "$PYTHON_BIN" "$BIN_DIR/python" 2>/dev/null || true
+            [ ! -f "$BIN_DIR/python3" ] && ln -sf "$PYTHON_BIN" "$BIN_DIR/python3" 2>/dev/null || true
+        fi
+
+        # Locate libpython3.13.so dynamically within the app's real sandbox environment
+        LIBPYTHON_PATH=""
+        for candidate in \
+            "${PREFIX}/lib/libpython3.13.so" \
+            "${PREFIX}/lib/libpython3.13.so.1.0" \
+            "/data/user/0/in.rocklab.federaide/files/usr/lib/libpython3.13.so" \
+            "/data/data/in.rocklab.federaide/files/usr/lib/libpython3.13.so"; do
+            if [ -f "$candidate" ]; then
+                LIBPYTHON_PATH="$candidate"
+                break
+            fi
         done
-        export LD_PRELOAD="/data/data/com.termux/files/usr/lib/libpython3.13.so${LD_PRELOAD:+:$LD_PRELOAD}"
+        if [ -z "$LIBPYTHON_PATH" ] && [ -n "$PREFIX" ] && [ -d "$PREFIX/lib" ]; then
+            LIBPYTHON_PATH=$(find "$PREFIX/lib" -name "libpython3.13.so*" 2>/dev/null | head -n 1)
+        fi
+
+        # Only export LD_PRELOAD if the file actually exists on device
+        if [ -n "$LIBPYTHON_PATH" ] && [ -f "$LIBPYTHON_PATH" ]; then
+            for prof in "$HOME/.bashrc" "$HOME/.profile" "${PREFIX}/etc/profile"; do
+                [ -f "$prof" ] && ! grep -q "libpython3.13" "$prof" 2>/dev/null && \
+                    echo "export LD_PRELOAD=\"$LIBPYTHON_PATH\${LD_PRELOAD:+:\$LD_PRELOAD}\"" >> "$prof"
+            done
+            export LD_PRELOAD="$LIBPYTHON_PATH${LD_PRELOAD:+:$LD_PRELOAD}"
+        fi
 
         echo "[*] Installing FEDERaiDE on exact Python 3.13 with pre-compiled wheels (Trace Mode)..."
         uv tool install --force --refresh --link-mode copy \
