@@ -183,11 +183,26 @@ EOF
         export UV_COMPILE_BYTECODE=0
         export UV_INDEX_STRATEGY=unsafe-first-match
 
-        # Ensure cc-rs and clang have the Android API level defined to prevent "Unversioned target triples" errors
-        export CFLAGS="-D__ANDROID_API__=24"
-        export CXXFLAGS="-D__ANDROID_API__=24"
-        export CC="clang"
-        export CXX="clang++"
+        # UV PEP-517 isolated builds strip CFLAGS/CXXFLAGS. 
+        # We must use physical wrapper scripts to force the Android API level into clang for maturin/cargo.
+        WRAPPER_DIR="$HOME/.compiler_wrappers"
+        mkdir -p "$WRAPPER_DIR"
+        
+        cat << EOF > "$WRAPPER_DIR/clang"
+#!/bin/sh
+exec ${PREFIX:-/data/data/in.rocklab.federaide/files/usr}/bin/clang -D__ANDROID_API__=24 "\$@"
+EOF
+
+        cat << EOF > "$WRAPPER_DIR/clang++"
+#!/bin/sh
+exec ${PREFIX:-/data/data/in.rocklab.federaide/files/usr}/bin/clang++ -D__ANDROID_API__=24 "\$@"
+EOF
+
+        chmod +x "$WRAPPER_DIR/clang" "$WRAPPER_DIR/clang++"
+        
+        export PATH="$WRAPPER_DIR:$PATH"
+        export CC="$WRAPPER_DIR/clang"
+        export CXX="$WRAPPER_DIR/clang++"
 
         # Ensure python executable and PYO3_PYTHON are set for maturin/cargo builds
         PYTHON_BIN="$(command -v python3.13 || command -v python3 || command -v python || true)"
