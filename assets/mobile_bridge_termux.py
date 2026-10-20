@@ -946,13 +946,21 @@ class HeadlessAgentView:
 
     def load_teams_registry(self):
         path = self.get_teams_storage_path()
+        teams = []
         if os.path.exists(path):
             try:
                 with open(path, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    teams = json.load(f)
             except Exception:
                 pass
-        return [{"name": "Default", "path": get_safe_starting_dir(), "is_active": True, "remote_url": ""}]
+        if not teams or not isinstance(teams, list):
+            safe_start = get_safe_starting_dir()
+            teams = [{"name": "Default", "path": safe_start, "is_active": True, "remote_url": ""}]
+        active_dir = getattr(self, "workspace_dir", get_safe_starting_dir())
+        if not any(os.path.abspath(t.get("path", "")) == os.path.abspath(active_dir) for t in teams):
+            name = os.path.basename(active_dir).lstrip(".") or "Workspace"
+            teams.insert(0, {"name": name, "path": active_dir, "is_active": True, "remote_url": ""})
+        return teams
 
     def save_teams_registry(self, teams):
         path = self.get_teams_storage_path()
