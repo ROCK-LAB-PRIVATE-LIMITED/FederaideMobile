@@ -189,13 +189,29 @@ EOF
         mkdir -p "$WRAPPER_DIR"
         
         cat << EOF > "$WRAPPER_DIR/clang"
-#!/bin/sh
-exec ${PREFIX:-/data/data/in.rocklab.federaide/files/usr}/bin/clang -D__ANDROID_API__=24 "\$@"
+#!/usr/bin/env bash
+NEW_ARGS=()
+for arg in "\$@"; do
+    if [[ "\$arg" == "--target="*"-android" ]]; then
+        NEW_ARGS+=("\${arg}24")
+    else
+        NEW_ARGS+=("\$arg")
+    fi
+done
+exec ${PREFIX:-/data/data/in.rocklab.federaide/files/usr}/bin/clang -D__ANDROID_API__=24 "\${NEW_ARGS[@]}"
 EOF
 
         cat << EOF > "$WRAPPER_DIR/clang++"
-#!/bin/sh
-exec ${PREFIX:-/data/data/in.rocklab.federaide/files/usr}/bin/clang++ -D__ANDROID_API__=24 "\$@"
+#!/usr/bin/env bash
+NEW_ARGS=()
+for arg in "\$@"; do
+    if [[ "\$arg" == "--target="*"-android" ]]; then
+        NEW_ARGS+=("\${arg}24")
+    else
+        NEW_ARGS+=("\$arg")
+    fi
+done
+exec ${PREFIX:-/data/data/in.rocklab.federaide/files/usr}/bin/clang++ -D__ANDROID_API__=24 "\${NEW_ARGS[@]}"
 EOF
 
         chmod +x "$WRAPPER_DIR/clang" "$WRAPPER_DIR/clang++"
