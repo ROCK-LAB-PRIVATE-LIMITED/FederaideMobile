@@ -183,6 +183,12 @@ EOF
         export UV_COMPILE_BYTECODE=0
         export UV_INDEX_STRATEGY=unsafe-first-match
 
+        # Ensure cc-rs and clang have the Android API level defined to prevent "Unversioned target triples" errors
+        export CFLAGS="-D__ANDROID_API__=24"
+        export CXXFLAGS="-D__ANDROID_API__=24"
+        export CC="clang"
+        export CXX="clang++"
+
         # Ensure python executable and PYO3_PYTHON are set for maturin/cargo builds
         PYTHON_BIN="$(command -v python3.13 || command -v python3 || command -v python || true)"
         if [ -n "$PYTHON_BIN" ]; then
