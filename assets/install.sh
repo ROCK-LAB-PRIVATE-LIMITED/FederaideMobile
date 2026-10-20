@@ -183,6 +183,12 @@ EOF
         export UV_COMPILE_BYTECODE=0
         export UV_INDEX_STRATEGY=unsafe-first-match
 
+        # Ensure libpython symbols are available (libpython LD_PRELOAD)
+        for prof in "$HOME/.bashrc" "$HOME/.profile" "/data/data/com.termux/files/usr/etc/profile"; do
+            [ -f "$prof" ] && ! grep -q "libpython3.13.so" "$prof" 2>/dev/null && \
+                echo 'export LD_PRELOAD="/data/data/com.termux/files/usr/lib/libpython3.13.so${LD_PRELOAD:+:$LD_PRELOAD}"' >> "$prof"
+        done
+        export LD_PRELOAD="/data/data/com.termux/files/usr/lib/libpython3.13.so${LD_PRELOAD:+:$LD_PRELOAD}"
 
         echo "[*] Installing FEDERaiDE on exact Python 3.13 with pre-compiled wheels (Trace Mode)..."
         uv tool install --force --refresh --link-mode copy \
