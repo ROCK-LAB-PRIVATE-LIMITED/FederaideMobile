@@ -834,21 +834,23 @@ const COMPLETE_CLIENT_HTML = `
             padding: 0.5rem 1rem calc(1.5rem + env(safe-area-inset-bottom, 16px)) 1rem;
             position: relative;
             z-index: 100;
+            transition: background-color 0.3s ease;
         }
         #input-dock::before {
             content: '';
             position: absolute;
-            top: -28px;
+            top: -48px;
             left: 0;
             right: 0;
             bottom: 0;
-            background: linear-gradient(to top, var(--bg-base) 65%, transparent);
+            background: linear-gradient(to top, var(--bg-base) 30%, transparent 100%);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            mask-image: linear-gradient(to top, black 70%, transparent);
-            -webkit-mask-image: linear-gradient(to top, black 70%, transparent);
+            mask-image: linear-gradient(to top, black 30%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to top, black 30%, transparent 100%);
             z-index: -1;
             pointer-events: none;
+            transition: background 0.3s ease;
         }
 
         /* Staged Attachment Chips */
