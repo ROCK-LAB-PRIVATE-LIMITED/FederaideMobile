@@ -184,33 +184,35 @@ EOF
         export UV_INDEX_STRATEGY=unsafe-first-match
 
         # UV PEP-517 isolated builds strip CFLAGS/CXXFLAGS. 
-        # We must use physical wrapper scripts to force the Android API level into clang for maturin/cargo.
-        # Using /system/bin/sh guarantees execution on Android without relying on termux-exec routing.
+        # We use a bash wrapper to inject the Android API level into clang's target triple for maturin/cargo.
+        PREFIX_PATH="${PREFIX:-/data/data/in.rocklab.federaide/files/usr}"
         WRAPPER_DIR="$HOME/.compiler_wrappers"
         mkdir -p "$WRAPPER_DIR"
         
         cat << EOF > "$WRAPPER_DIR/clang"
-#!/system/bin/sh
-for arg do
-    shift
-    case "\$arg" in
-        --target=*-android) set -- "\$@" "\${arg}24" ;;
-        *) set -- "\$@" "\$arg" ;;
-    esac
+#!${PREFIX_PATH}/bin/bash
+NEW_ARGS=()
+for arg in "\$@"; do
+    if [[ "\$arg" == "--target="*"-android" ]]; then
+        NEW_ARGS+=("\${arg}24")
+    else
+        NEW_ARGS+=("\$arg")
+    fi
 done
-exec ${PREFIX:-/data/data/in.rocklab.federaide/files/usr}/bin/clang -D__ANDROID_API__=24 "\$@"
+exec ${PREFIX_PATH}/bin/clang "\${NEW_ARGS[@]}"
 EOF
 
         cat << EOF > "$WRAPPER_DIR/clang++"
-#!/system/bin/sh
-for arg do
-    shift
-    case "\$arg" in
-        --target=*-android) set -- "\$@" "\${arg}24" ;;
-        *) set -- "\$@" "\$arg" ;;
-    esac
+#!${PREFIX_PATH}/bin/bash
+NEW_ARGS=()
+for arg in "\$@"; do
+    if [[ "\$arg" == "--target="*"-android" ]]; then
+        NEW_ARGS+=("\${arg}24")
+    else
+        NEW_ARGS+=("\$arg")
+    fi
 done
-exec ${PREFIX:-/data/data/in.rocklab.federaide/files/usr}/bin/clang++ -D__ANDROID_API__=24 "\$@"
+exec ${PREFIX_PATH}/bin/clang++ "\${NEW_ARGS[@]}"
 EOF
 
         chmod +x "$WRAPPER_DIR/clang" "$WRAPPER_DIR/clang++"
