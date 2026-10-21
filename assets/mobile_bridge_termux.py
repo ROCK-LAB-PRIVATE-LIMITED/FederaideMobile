@@ -537,7 +537,7 @@ class HeadlessAgentView:
                 return False
         except Exception:
             pass
-        return False
+        return True
 
     def ensure_chatgpt_auth_for_agent(self, agent):
         try:
