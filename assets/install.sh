@@ -24,7 +24,7 @@ IS_ARM=false
 FEDERAIDE_VERSION="${FEDERAIDE_VERSION:-2.0.8}"
 
 # Detect Termux (Android)
-if [ -d "/data/data/in.rocklab.federaide" ] || [ -n "$PREFIX" ] || [ -d "$HOME" ]; then
+if [ -d "/data/data/in.rocklab.federaide" ] || [ -d "/data/data/com.termux" ] || [ -n "$PREFIX" ] || [ -d "$HOME" ]; then
     IS_TERMUX=true
 fi
 
@@ -183,37 +183,36 @@ EOF
         export UV_COMPILE_BYTECODE=0
         export UV_INDEX_STRATEGY=unsafe-first-match
 
-        # Clean up any leftover wrapper directory
-        rm -rf "$HOME/.compiler_wrappers"
+        # 1. Compiler wrappers: Intercept bare '--target=...-android' from cc-rs and add API level 24
+        # (Survives PEP-517 build isolation which strips CFLAGS/CXXFLAGS)
+        PREFIX_PATH="${PREFIX:-/data/data/in.rocklab.federaide/files/usr}"
+        WRAPPER_DIR="$HOME/.compiler_wrappers"
+        mkdir -p "$WRAPPER_DIR"
 
-        # cc-rs (used by cargo/maturin to compile C libraries like zstd in uuid-utils)
-        # reads target-specific CFLAGS using underscores: CFLAGS_<target>
-        export CFLAGS_aarch64_linux_android="-D__ANDROID_API__=24 -target aarch64-linux-android24"
-        export CXXFLAGS_aarch64_linux_android="-D__ANDROID_API__=24 -target aarch64-linux-android24"
-        export CFLAGS="-D__ANDROID_API__=24"
-        export CXXFLAGS="-D__ANDROID_API__=24"
+        for cc_tool in clang clang++; do
+            cat << EOF > "$WRAPPER_DIR/$cc_tool"
+#!${PREFIX_PATH}/bin/bash
+NEW_ARGS=()
+for arg in "\$@"; do
+    if [[ "\$arg" == "--target="*"-android" ]]; then
+        NEW_ARGS+=("\${arg}24")
+    else
+        NEW_ARGS+=("\$arg")
+    fi
+done
+exec ${PREFIX_PATH}/bin/$cc_tool "\${NEW_ARGS[@]}"
+EOF
+            chmod +x "$WRAPPER_DIR/$cc_tool"
+        done
 
-        # Tell cargo to use the Termux clang as linker for the aarch64 Android target
-        export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="clang"
-        export CC="clang"
-        export CXX="clang++"
+        export PATH="$WRAPPER_DIR:$PATH"
+        export CC="$WRAPPER_DIR/clang"
+        export CXX="$WRAPPER_DIR/clang++"
 
-        # Ensure python executable and PYO3_PYTHON are set for maturin/cargo builds
-        PYTHON_BIN="$(command -v python3.13 || command -v python3 || command -v python || true)"
-        if [ -n "$PYTHON_BIN" ]; then
-            export PYO3_PYTHON="$PYTHON_BIN"
-            BIN_DIR="$(dirname "$PYTHON_BIN")"
-            [ ! -f "$BIN_DIR/python" ] && ln -sf "$PYTHON_BIN" "$BIN_DIR/python" 2>/dev/null || true
-            [ ! -f "$BIN_DIR/python3" ] && ln -sf "$PYTHON_BIN" "$BIN_DIR/python3" 2>/dev/null || true
-        fi
-
-        # Direct maturin to query the stable base Python interpreter
+        # 2. Tell maturin to query the stable base Termux Python interpreter
         export MATURIN_PEP517_USE_BASE_PYTHON="true"
-        unset PYTHONHOME
-        export BINDGEN_EXTRA_CLANG_ARGS="--target=aarch64-linux-android24"
-        export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="clang"
 
-        # Locate libpython3.13.so dynamically within the app's real sandbox environment
+        # 3. Locate and maintain LD_PRELOAD for libpython3.13.so
         LIBPYTHON_PATH=""
         for candidate in \
             "${PREFIX}/lib/libpython3.13.so" \
@@ -229,7 +228,6 @@ EOF
             LIBPYTHON_PATH=$(find "$PREFIX/lib" -name "libpython3.13.so*" 2>/dev/null | head -n 1)
         fi
 
-        # Only export LD_PRELOAD if the file actually exists on device
         if [ -n "$LIBPYTHON_PATH" ] && [ -f "$LIBPYTHON_PATH" ]; then
             for prof in "$HOME/.bashrc" "$HOME/.profile" "${PREFIX}/etc/profile"; do
                 [ -f "$prof" ] && ! grep -q "libpython3.13" "$prof" 2>/dev/null && \
@@ -256,6 +254,8 @@ EOF
         # Ensure the executable directory is added to the Termux path permanently
         grep -qF ".local/bin" ~/.bashrc 2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
         
+        # Clean up temporary build artifacts
+        rm -rf "$WRAPPER_DIR"
         unset UV_FIND_LINKS
         rm -rf "$BUILD_DIR"
 
