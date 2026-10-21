@@ -183,43 +183,20 @@ EOF
         export UV_COMPILE_BYTECODE=0
         export UV_INDEX_STRATEGY=unsafe-first-match
 
-        # UV PEP-517 isolated builds strip CFLAGS/CXXFLAGS. 
-        # We use a bash wrapper to inject the Android API level into clang's target triple for maturin/cargo.
-        PREFIX_PATH="${PREFIX:-/data/data/in.rocklab.federaide/files/usr}"
-        WRAPPER_DIR="$HOME/.compiler_wrappers"
-        mkdir -p "$WRAPPER_DIR"
-        
-        cat << EOF > "$WRAPPER_DIR/clang"
-#!${PREFIX_PATH}/bin/bash
-NEW_ARGS=()
-for arg in "\$@"; do
-    if [[ "\$arg" == "--target="*"-android" ]]; then
-        NEW_ARGS+=("\${arg}24")
-    else
-        NEW_ARGS+=("\$arg")
-    fi
-done
-exec ${PREFIX_PATH}/bin/clang "\${NEW_ARGS[@]}"
-EOF
+        # Clean up any leftover wrapper directory
+        rm -rf "$HOME/.compiler_wrappers"
 
-        cat << EOF > "$WRAPPER_DIR/clang++"
-#!${PREFIX_PATH}/bin/bash
-NEW_ARGS=()
-for arg in "\$@"; do
-    if [[ "\$arg" == "--target="*"-android" ]]; then
-        NEW_ARGS+=("\${arg}24")
-    else
-        NEW_ARGS+=("\$arg")
-    fi
-done
-exec ${PREFIX_PATH}/bin/clang++ "\${NEW_ARGS[@]}"
-EOF
+        # cc-rs (used by cargo/maturin to compile C libraries like zstd in uuid-utils)
+        # reads target-specific CFLAGS using underscores: CFLAGS_<target>
+        export CFLAGS_aarch64_linux_android="-D__ANDROID_API__=24 -target aarch64-linux-android24"
+        export CXXFLAGS_aarch64_linux_android="-D__ANDROID_API__=24 -target aarch64-linux-android24"
+        export CFLAGS="-D__ANDROID_API__=24"
+        export CXXFLAGS="-D__ANDROID_API__=24"
 
-        chmod +x "$WRAPPER_DIR/clang" "$WRAPPER_DIR/clang++"
-        
-        export PATH="$WRAPPER_DIR:$PATH"
-        export CC="$WRAPPER_DIR/clang"
-        export CXX="$WRAPPER_DIR/clang++"
+        # Tell cargo to use the Termux clang as linker for the aarch64 Android target
+        export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="clang"
+        export CC="clang"
+        export CXX="clang++"
 
         # Ensure python executable and PYO3_PYTHON are set for maturin/cargo builds
         PYTHON_BIN="$(command -v python3.13 || command -v python3 || command -v python || true)"
@@ -246,20 +223,14 @@ EOF
             LIBPYTHON_PATH=$(find "$PREFIX/lib" -name "libpython3.13.so*" 2>/dev/null | head -n 1)
         fi
 
-        # Persist LD_PRELOAD into shell profiles so the rest of the app and terminal retain it
+        # Only export LD_PRELOAD if the file actually exists on device
         if [ -n "$LIBPYTHON_PATH" ] && [ -f "$LIBPYTHON_PATH" ]; then
             for prof in "$HOME/.bashrc" "$HOME/.profile" "${PREFIX}/etc/profile"; do
                 [ -f "$prof" ] && ! grep -q "libpython3.13" "$prof" 2>/dev/null && \
                     echo "export LD_PRELOAD=\"$LIBPYTHON_PATH\${LD_PRELOAD:+:\$LD_PRELOAD}\"" >> "$prof"
             done
-            # Point PyO3/maturin to the library directory instead of injecting it into isolated python child processes
-            export PYO3_CROSS_LIB_DIR="$(dirname "$LIBPYTHON_PATH")"
+            export LD_PRELOAD="$LIBPYTHON_PATH${LD_PRELOAD:+:$LD_PRELOAD}"
         fi
-
-        # Temporarily save existing LD_PRELOAD and unset it during 'uv tool install'
-        # so maturin's python probe subprocess does not abort with EOF on startup
-        SAVED_LD_PRELOAD="$LD_PRELOAD"
-        unset LD_PRELOAD
 
         echo "[*] Installing FEDERaiDE on exact Python 3.13 with pre-compiled wheels (Trace Mode)..."
         uv tool install --force --refresh --link-mode copy \
@@ -275,13 +246,6 @@ EOF
             --with keyrings.alt \
             --with weasyprint \
             "federaide[vision,ide,pdf]==${FEDERAIDE_VERSION}" 2>&1
-
-        # Restore LD_PRELOAD immediately after install completes
-        if [ -n "$SAVED_LD_PRELOAD" ]; then
-            export LD_PRELOAD="$SAVED_LD_PRELOAD"
-        elif [ -n "$LIBPYTHON_PATH" ] && [ -f "$LIBPYTHON_PATH" ]; then
-            export LD_PRELOAD="$LIBPYTHON_PATH"
-        fi
         
         # Ensure the executable directory is added to the Termux path permanently
         grep -qF ".local/bin" ~/.bashrc 2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc

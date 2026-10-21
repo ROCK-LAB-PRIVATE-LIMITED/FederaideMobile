@@ -1,6 +1,6 @@
 {
   "name": "federaidemobile",
-  "version": "1.0.38",
+  "version": "1.0.39",
   "main": "index.js",
   "dependencies": {
     "expo": "~57.0.13",
