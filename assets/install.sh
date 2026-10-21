@@ -246,14 +246,20 @@ EOF
             LIBPYTHON_PATH=$(find "$PREFIX/lib" -name "libpython3.13.so*" 2>/dev/null | head -n 1)
         fi
 
-        # Only export LD_PRELOAD if the file actually exists on device
+        # Persist LD_PRELOAD into shell profiles so the rest of the app and terminal retain it
         if [ -n "$LIBPYTHON_PATH" ] && [ -f "$LIBPYTHON_PATH" ]; then
             for prof in "$HOME/.bashrc" "$HOME/.profile" "${PREFIX}/etc/profile"; do
                 [ -f "$prof" ] && ! grep -q "libpython3.13" "$prof" 2>/dev/null && \
                     echo "export LD_PRELOAD=\"$LIBPYTHON_PATH\${LD_PRELOAD:+:\$LD_PRELOAD}\"" >> "$prof"
             done
-            export LD_PRELOAD="$LIBPYTHON_PATH${LD_PRELOAD:+:$LD_PRELOAD}"
+            # Point PyO3/maturin to the library directory instead of injecting it into isolated python child processes
+            export PYO3_CROSS_LIB_DIR="$(dirname "$LIBPYTHON_PATH")"
         fi
+
+        # Temporarily save existing LD_PRELOAD and unset it during 'uv tool install'
+        # so maturin's python probe subprocess does not abort with EOF on startup
+        SAVED_LD_PRELOAD="$LD_PRELOAD"
+        unset LD_PRELOAD
 
         echo "[*] Installing FEDERaiDE on exact Python 3.13 with pre-compiled wheels (Trace Mode)..."
         uv tool install --force --refresh --link-mode copy \
@@ -269,6 +275,13 @@ EOF
             --with keyrings.alt \
             --with weasyprint \
             "federaide[vision,ide,pdf]==${FEDERAIDE_VERSION}" 2>&1
+
+        # Restore LD_PRELOAD immediately after install completes
+        if [ -n "$SAVED_LD_PRELOAD" ]; then
+            export LD_PRELOAD="$SAVED_LD_PRELOAD"
+        elif [ -n "$LIBPYTHON_PATH" ] && [ -f "$LIBPYTHON_PATH" ]; then
+            export LD_PRELOAD="$LIBPYTHON_PATH"
+        fi
         
         # Ensure the executable directory is added to the Termux path permanently
         grep -qF ".local/bin" ~/.bashrc 2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
