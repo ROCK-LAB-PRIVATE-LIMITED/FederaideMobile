@@ -242,13 +242,15 @@ EOF
             --index-strategy unsafe-first-match \
             --find-links "$BUILD_DIR/dist" \
             --find-links "https://geoarkadeep.github.io/Tyres/" \
-            --with cffi==2.1.0 \
+            --with cffi \
+            --with cryptography \
             --with regex==2026.6.28 \
             --with brotli==1.2.0 \
             --with pycryptodome \
             --with tree-sitter \
             --with keyrings.alt \
             --with weasyprint \
+            --with mcp \
             "federaide[vision,ide,pdf]==${FEDERAIDE_VERSION}" 2>&1
         
         # Ensure the executable directory is added to the Termux path permanently
