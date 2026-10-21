@@ -207,9 +207,9 @@ EOF
             [ ! -f "$BIN_DIR/python3" ] && ln -sf "$PYTHON_BIN" "$BIN_DIR/python3" 2>/dev/null || true
         fi
 
-        # Direct maturin to query the stable base Python interpreter rather than the temporary venv path
+        # Direct maturin to query the stable base Python interpreter
         export MATURIN_PEP517_USE_BASE_PYTHON="true"
-        export PYTHONHOME="${PREFIX:-/data/data/in.rocklab.federaide/files/usr}"
+        unset PYTHONHOME
         export BINDGEN_EXTRA_CLANG_ARGS="--target=aarch64-linux-android24"
         export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="clang"
 

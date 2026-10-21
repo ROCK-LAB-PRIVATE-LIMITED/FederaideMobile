@@ -1012,9 +1012,14 @@ int execve(const char *pathname, char *const argv[], char *const envp[]) {
             new_argv[2] = resolved_path;
             for (int i = 1; i < argc; i++) {
                 if (argv[i]) {
-                    char *rarg = (char *)malloc(512);
-                    rewrite_path(argv[i], rarg, 512);
-                    new_argv[i + 2] = rarg;
+                    size_t rarg_len = strlen(argv[i]) + 1024;
+                    char *rarg = (char *)malloc(rarg_len);
+                    if (rewrite_path(argv[i], rarg, rarg_len)) {
+                        new_argv[i + 2] = rarg;
+                    } else {
+                        free(rarg);
+                        new_argv[i + 2] = argv[i];
+                    }
                 }
             }
             new_argv[argc + 2] = NULL;
@@ -1031,9 +1036,14 @@ int execve(const char *pathname, char *const argv[], char *const envp[]) {
     new_argv[1] = resolved_path;
     for (int i = 1; i < argc; i++) {
         if (argv[i]) {
-            char *rarg = (char *)malloc(512);
-            rewrite_path(argv[i], rarg, 512);
-            new_argv[i + 1] = rarg;
+            size_t rarg_len = strlen(argv[i]) + 1024;
+            char *rarg = (char *)malloc(rarg_len);
+            if (rewrite_path(argv[i], rarg, rarg_len)) {
+                new_argv[i + 1] = rarg;
+            } else {
+                free(rarg);
+                new_argv[i + 1] = argv[i];
+            }
         }
     }
     new_argv[argc + 1] = NULL;
@@ -1163,15 +1173,20 @@ int posix_spawn(pid_t *pid, const char *path,
             new_argv[2] = resolved_path;
             for (int i = 1; i < argc; i++) {
                 if (argv[i]) {
-                    char *rarg = (char *)malloc(512);
-                    rewrite_path(argv[i], rarg, 512);
-                    new_argv[i + 2] = rarg;
+                    size_t rarg_len = strlen(argv[i]) + 1024;
+                    char *rarg = (char *)malloc(rarg_len);
+                    if (rewrite_path(argv[i], rarg, rarg_len)) {
+                        new_argv[i + 2] = rarg;
+                    } else {
+                        free(rarg);
+                        new_argv[i + 2] = argv[i];
+                    }
                 }
             }
             new_argv[argc + 2] = NULL;
             char **passed_env = ensure_env(envp, resolved_interp);
             int ret = real_posix_spawn(pid, LINKER, file_actions, attrp, new_argv, passed_env);
-            for (int i = 1; i < argc; i++) if (new_argv[i + 2]) free(new_argv[i + 2]);
+            for (int i = 1; i < argc; i++) if (new_argv[i + 2] && new_argv[i + 2] != argv[i]) free(new_argv[i + 2]);
             free(new_argv);
             return ret;
         }
@@ -1185,9 +1200,14 @@ int posix_spawn(pid_t *pid, const char *path,
     new_argv[1] = resolved_path;
     for (int i = 1; i < argc; i++) {
         if (argv[i]) {
-            char *rarg = (char *)malloc(512);
-            rewrite_path(argv[i], rarg, 512);
-            new_argv[i + 1] = rarg;
+            size_t rarg_len = strlen(argv[i]) + 1024;
+            char *rarg = (char *)malloc(rarg_len);
+            if (rewrite_path(argv[i], rarg, rarg_len)) {
+                new_argv[i + 1] = rarg;
+            } else {
+                free(rarg);
+                new_argv[i + 1] = argv[i];
+            }
         }
     }
     new_argv[argc + 1] = NULL;

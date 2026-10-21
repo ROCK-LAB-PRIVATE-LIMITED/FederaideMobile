@@ -152,6 +152,9 @@ fi
 echo "[+] APK successfully built at: $SANDBOX_DIR/$APK_PATH"
 
 # 10. Install and Launch on Emulator
+echo "[*] Wiping previous application data for a fresh install..."
+adb shell pm clear in.rocklab.federaide || true
+
 echo "[*] Installing APK onto emulator..."
 adb install -r "$APK_PATH"
 
