@@ -21,7 +21,7 @@ IS_TERMUX=false
 IS_WINDOWS_BASH=false
 IS_ARM=false
 # Pinned version of FEDERaiDE to install
-FEDERAIDE_VERSION="${FEDERAIDE_VERSION:-2.0.8}"
+FEDERAIDE_VERSION="${FEDERAIDE_VERSION:-2.0.10}"
 
 # Detect Termux (Android)
 if [ -d "/data/data/in.rocklab.federaide" ] || [ -d "/data/data/com.termux" ] || [ -n "$PREFIX" ] || [ -d "$HOME" ]; then
