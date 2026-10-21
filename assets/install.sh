@@ -212,6 +212,12 @@ EOF
         # 2. Tell maturin to query the stable base Termux Python interpreter
         export MATURIN_PEP517_USE_BASE_PYTHON="true"
 
+        # Wipe any stale uv.toml and corrupted sdist cache so rpds-py doesn't build maturin from sdist
+        rm -rf "$HOME/.config/uv" "$HOME/uv.toml" "$HOME/.cache/uv/sdists"*
+
+        # Install cffi, setuptools, and wheel into the base Python so cryptography's build.rs finds them
+        uv pip install --python "${PREFIX_PATH}/bin/python3.13" --break-system-packages cffi setuptools wheel
+
         # 3. Locate and maintain LD_PRELOAD for libpython3.13.so
         LIBPYTHON_PATH=""
         for candidate in \
