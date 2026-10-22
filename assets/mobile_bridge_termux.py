@@ -180,11 +180,16 @@ def _dynamic_get_team_dir():
 
 def _dynamic_get_storage_path(*parts):
     base_dir = _dynamic_get_team_dir()
-    target = os.path.join(base_dir, *parts)
-    if len(parts) > 0 and not os.path.splitext(parts[-1])[1]:
-        os.makedirs(target, exist_ok=True)
-    elif len(parts) > 1:
-        os.makedirs(os.path.dirname(target), exist_ok=True)
+    if parts and parts[0] in ["agents", "sessions", "nomem_sessions"]:
+        target = os.path.join(base_dir, *parts)
+    else:
+        target = os.path.join(*parts)
+
+    if not os.path.exists(target):
+        if len(parts) > 0 and not os.path.splitext(parts[-1])[1]:
+            os.makedirs(target, exist_ok=True)
+        elif len(parts) > 1:
+            os.makedirs(os.path.dirname(target), exist_ok=True)
     return target
 
 toolbox.get_team_dir = _dynamic_get_team_dir
