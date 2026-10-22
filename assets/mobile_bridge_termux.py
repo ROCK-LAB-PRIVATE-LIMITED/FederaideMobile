@@ -92,7 +92,7 @@ def get_safe_starting_dir() -> str:
     return str(p.absolute())
 
 def get_active_team_storage_dir(team_path):
-    if not team_path or os.path.abspath(team_path) == os.path.abspath(get_safe_starting_dir()):
+    if not team_path or os.path.abspath(team_path) == os.path.abspath(FEDERATE_DIR) or os.path.abspath(team_path) == os.path.abspath(get_safe_starting_dir()):
         return FEDERATE_DIR
 
     # 1. Check if the repository has a .federate folder with agents or sessions
@@ -304,21 +304,23 @@ class AppMock:
 # --- HEADLESS AGENT VIEW CONTROLLER ---
 class HeadlessAgentView:
     def __init__(self):
-        initial_dir = get_safe_starting_dir()
+        self.workspace_dir = get_safe_starting_dir()
+        initial_team = FEDERATE_DIR
         try:
             teams_path = os.path.join(FEDERATE_DIR, "teams.json")
             if os.path.exists(teams_path):
                 with open(teams_path, "r", encoding="utf-8") as f:
                     saved_teams = json.load(f)
                 for t in saved_teams:
-                    if t.get("is_active") and t.get("path") and os.path.isdir(t.get("path")):
-                        initial_dir = os.path.abspath(t["path"])
-                        break
+                    if t.get("is_active") and t.get("path"):
+                        candidate = os.path.abspath(os.path.expanduser(t["path"]))
+                        if os.path.isdir(candidate) or candidate == FEDERATE_DIR:
+                            initial_team = candidate
+                            break
         except Exception:
             pass
 
-        self.workspace_dir = initial_dir
-        self.active_team_path = initial_dir
+        self.active_team_path = initial_team
         try: os.chdir(self.workspace_dir)
         except Exception: pass
 
@@ -334,9 +336,9 @@ class HeadlessAgentView:
         self.current_telegram_chat_id = None
         self.last_screenshot_path = None
 
-        # Start background schedule timer and initial git merge check
+        # Start background schedule timer and initial git merge check on the team repository
         threading.Thread(target=self._scheduler_loop, daemon=True).start()
-        threading.Thread(target=lambda: self.check_and_merge_git_workspace(self.workspace_dir), daemon=True).start()
+        threading.Thread(target=lambda: self.check_and_merge_git_workspace(self.active_team_path), daemon=True).start()
 
         default_name = self.agent_manager.get_default_agent_name()
         self.active_agent = self.agent_manager.get_agent(default_name) or list(self.agent_manager.agents.values())[0]
@@ -406,8 +408,8 @@ class HeadlessAgentView:
     def perform_autocommit(self, agent_name="Agent"):
         if getattr(toolbox, "ABORT_EVENT", None) and toolbox.ABORT_EVENT.is_set():
             return
-        work_dir = self.workspace_dir
-        if not work_dir or not os.path.isdir(os.path.join(work_dir, ".git")):
+        team_repo = get_active_team_storage_dir(self.active_team_path)
+        if not team_repo or not os.path.isdir(os.path.join(team_repo, ".git")):
             return
 
         def _do_commit():
@@ -416,36 +418,36 @@ class HeadlessAgentView:
                 env = os.environ.copy()
                 env["GIT_TERMINAL_PROMPT"] = "0"
 
-                # 1. Check if there are uncommitted changes
-                status_res = subprocess.run(["git", "status", "--porcelain"], cwd=work_dir, capture_output=True, text=True, timeout=15, env=env)
+                # 1. Check if there are uncommitted changes in the team repository
+                status_res = subprocess.run(["git", "status", "--porcelain"], cwd=team_repo, capture_output=True, text=True, timeout=15, env=env)
                 if not status_res.stdout.strip():
                     return
 
                 # 2. Configure git identity if missing
-                check_name = subprocess.run(["git", "config", "user.name"], cwd=work_dir, capture_output=True, text=True, timeout=5, env=env)
+                check_name = subprocess.run(["git", "config", "user.name"], cwd=team_repo, capture_output=True, text=True, timeout=5, env=env)
                 if not check_name.stdout.strip():
                     user_cfg = toolbox.load_global_settings()
                     u_name = user_cfg.get("user_name", "FEDERaiDE User")
-                    subprocess.run(["git", "config", "user.name", u_name], cwd=work_dir, timeout=5, env=env)
-                    subprocess.run(["git", "config", "user.email", "agent@federaide.local"], cwd=work_dir, timeout=5, env=env)
+                    subprocess.run(["git", "config", "user.name", u_name], cwd=team_repo, timeout=5, env=env)
+                    subprocess.run(["git", "config", "user.email", "agent@federaide.local"], cwd=team_repo, timeout=5, env=env)
 
-                # 3. Stage and commit silently
-                subprocess.run(["git", "add", "-A"], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                # 3. Stage and commit team metadata only
+                subprocess.run(["git", "add", "-A"], cwd=team_repo, capture_output=True, text=True, timeout=30, env=env)
                 msg = f"FEDERaiDE autocommit: {agent_name} completed turn ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})"
-                commit_res = subprocess.run(["git", "commit", "-m", msg], cwd=work_dir, capture_output=True, text=True, timeout=30, env=env)
+                commit_res = subprocess.run(["git", "commit", "-m", msg], cwd=team_repo, capture_output=True, text=True, timeout=30, env=env)
 
                 if commit_res.returncode == 0:
                     self.get_sessions_list()
 
                     # 4. Silent background auto-push if a remote is configured (matching FEDERaiDE TUI)
-                    check_remote = subprocess.run(["git", "remote"], cwd=work_dir, capture_output=True, text=True, timeout=5, env=env)
+                    check_remote = subprocess.run(["git", "remote"], cwd=team_repo, capture_output=True, text=True, timeout=5, env=env)
                     if check_remote.stdout.strip():
-                        auth_args = get_git_auth_header_args(work_dir)
-                        push_res = subprocess.run(["git"] + auth_args + ["push"], cwd=work_dir, capture_output=True, text=True, timeout=60, env=env)
+                        auth_args = get_git_auth_header_args(team_repo)
+                        push_res = subprocess.run(["git"] + auth_args + ["push"], cwd=team_repo, capture_output=True, text=True, timeout=60, env=env)
                         if push_res.returncode != 0:
                             err_str = (push_res.stderr or push_res.stdout or "")
                             if "conflict" in err_str.lower() or "diverged" in err_str.lower():
-                                self.send_to_electron({"type": "git_conflict", "path": work_dir})
+                                self.send_to_electron({"type": "git_conflict", "path": team_repo})
             except Exception:
                 pass
 
@@ -959,12 +961,11 @@ class HeadlessAgentView:
             except Exception:
                 pass
         if not teams or not isinstance(teams, list):
-            safe_start = get_safe_starting_dir()
-            teams = [{"name": "Default", "path": safe_start, "is_active": True, "remote_url": ""}]
-        active_dir = getattr(self, "workspace_dir", get_safe_starting_dir())
-        if not any(os.path.abspath(t.get("path", "")) == os.path.abspath(active_dir) for t in teams):
-            name = os.path.basename(active_dir).lstrip(".") or "Workspace"
-            teams.insert(0, {"name": name, "path": active_dir, "is_active": True, "remote_url": ""})
+            teams = [{"name": "Default", "path": FEDERATE_DIR, "is_active": True, "remote_url": ""}]
+        active_team = getattr(self, "active_team_path", FEDERATE_DIR)
+        if not any(os.path.abspath(t.get("path", "")) == os.path.abspath(active_team) for t in teams):
+            name = os.path.basename(active_team).lstrip(".") or "Default"
+            teams.insert(0, {"name": name, "path": active_team, "is_active": True, "remote_url": ""})
         return teams
 
     def save_teams_registry(self, teams):
@@ -975,9 +976,9 @@ class HeadlessAgentView:
 
     def get_teams_data(self, target_path=None):
         teams = self.load_teams_registry()
-        # Mark active team based on current workspace
+        # Mark active team based on active team storage path
         for t in teams:
-            t["is_active"] = (os.path.abspath(t.get("path", "")) == os.path.abspath(self.workspace_dir))
+            t["is_active"] = (os.path.abspath(t.get("path", "")) == os.path.abspath(self.active_team_path))
         
         editing_team = {}
         if target_path:
@@ -1029,9 +1030,9 @@ class HeadlessAgentView:
         if not path or not os.path.exists(path):
             os.makedirs(path, exist_ok=True)
         abs_path = os.path.abspath(path)
-        self.workspace_dir = abs_path
         self.active_team_path = abs_path
-        try: os.chdir(abs_path)
+        # Keep workspace_dir shared across all teams
+        try: os.chdir(self.workspace_dir)
         except Exception: pass
 
         teams = self.load_teams_registry()
@@ -1074,7 +1075,7 @@ class HeadlessAgentView:
         name = fields.get("name", "").strip() or "Workspace"
         raw_path = fields.get("path", "").strip() or f".team_{name.lower().replace(' ', '_')}"
         if not os.path.isabs(raw_path):
-            folder_path = os.path.abspath(os.path.join(os.path.expanduser("~"), "FederateWorkspace", raw_path))
+            folder_path = os.path.abspath(os.path.join(os.path.expanduser("~"), raw_path))
         else:
             folder_path = os.path.abspath(raw_path)
         os.makedirs(folder_path, exist_ok=True)
@@ -1124,20 +1125,20 @@ class HeadlessAgentView:
     def delete_team(self, path, purge=False):
         teams = [t for t in self.load_teams_registry() if os.path.abspath(t.get("path", "")) != os.path.abspath(path)]
         self.save_teams_registry(teams)
-        if purge and path and os.path.exists(path) and os.path.abspath(path) != os.path.abspath(get_safe_starting_dir()):
+        if purge and path and os.path.exists(path) and os.path.abspath(path) != os.path.abspath(FEDERATE_DIR) and os.path.abspath(path) != os.path.abspath(get_safe_starting_dir()):
             import shutil
             try:
                 shutil.rmtree(path)
             except Exception as e:
                 self.log_to_ui(f"[bold red]Failed to purge directory: {e}[/bold red]")
-        if os.path.abspath(self.workspace_dir) == os.path.abspath(path):
-            self.switch_team(get_safe_starting_dir(), "Default")
+        if os.path.abspath(self.active_team_path) == os.path.abspath(path):
+            self.switch_team(FEDERATE_DIR, "Default")
         else:
             self.get_teams_data()
 
     def team_git_action(self, action, target_path=None):
         def _run():
-            work_dir = target_path or self.workspace_dir
+            work_dir = target_path or self.active_team_path
             import subprocess
             env = os.environ.copy()
             env["GIT_TERMINAL_PROMPT"] = "0"
@@ -1224,7 +1225,7 @@ class HeadlessAgentView:
                 return
 
             if not os.path.isabs(raw_path):
-                folder_path = os.path.abspath(os.path.join(os.path.expanduser("~"), "FederateWorkspace", raw_path))
+                folder_path = os.path.abspath(os.path.join(os.path.expanduser("~"), raw_path))
             else:
                 folder_path = os.path.abspath(raw_path)
 
