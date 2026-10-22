@@ -3667,7 +3667,7 @@ const COMPLETE_CLIENT_HTML = `
 
         function renderDrawerRecents() {
             drawerRecentsList.innerHTML = '';
-            const namedSessions = cachedSessions.filter(s => s.name && !s.name.startsWith("sess_"));
+            const namedSessions = cachedSessions.filter(s => s.is_nomem || (s.name && !s.name.startsWith("sess_")));
             const displayList = showAllSessions ? cachedSessions : namedSessions.slice(0, 10);
 
             if (displayList.length === 0) {
@@ -3684,8 +3684,12 @@ const COMPLETE_CLIENT_HTML = `
             displayList.forEach(s => {
                 const item = document.createElement('div');
                 item.className = 'recent-chat-item';
-                item.innerText = s.name || s.id;
-                item.title = s.name || s.id;
+                const displayName = (s.is_nomem ? '[NoMem] ' : '') + (s.name || s.id);
+                item.innerText = displayName;
+                item.title = (s.is_nomem ? '[No Memory] ' : '') + (s.name || s.id);
+                if (s.is_nomem) {
+                    item.style.color = 'var(--nomem-color, #f2a813)';
+                }
                 item.onclick = () => {
                     sendToPython({ action: "load_session", path: s.path });
                     toggleDrawer(false);

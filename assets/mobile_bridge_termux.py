@@ -1425,8 +1425,9 @@ class HeadlessAgentView:
     def get_sessions_list(self):
         active_storage = get_active_team_storage_dir(self.active_team_path)
         sessions_dir = os.path.join(active_storage, "sessions")
-        all_files = glob.glob(os.path.join(sessions_dir, "*.json"))
-        repo_dir = self.workspace_dir
+        nomem_dir = os.path.join(active_storage, "nomem_sessions")
+        all_files = glob.glob(os.path.join(sessions_dir, "*.json")) + glob.glob(os.path.join(nomem_dir, "*.json"))
+        repo_dir = active_storage
 
         # Group agent session history files by logical conversation session ID
         grouped_sessions = {}
@@ -1437,7 +1438,10 @@ class HeadlessAgentView:
 
             base = fname.replace(".json", "")
             parts = base.split("_")
-            if len(parts) >= 2 and parts[0] == "sess":
+            is_nomem = "_nomem_" in fname or "/nomem_sessions/" in f or "\\nomem_sessions\\" in f
+            if len(parts) >= 3 and parts[1] == "nomem":
+                sess_id = f"{parts[0]}_{parts[1]}_{parts[2]}"
+            elif len(parts) >= 2 and parts[0] == "sess":
                 sess_id = f"{parts[0]}_{parts[1]}"
             else:
                 sess_id = base
@@ -1448,7 +1452,8 @@ class HeadlessAgentView:
                     "path": f,
                     "timestamp": ts,
                     "id": sess_id,
-                    "base": base
+                    "base": base,
+                    "is_nomem": is_nomem
                 }
 
         # Order unique conversations by last Git commit timestamp (latest conversation on top)
@@ -1463,12 +1468,14 @@ class HeadlessAgentView:
         results = []
         for item in sorted_groups:
             sess_id = item["id"]
-            # Check name_map for session title, falling back to clean identifier
-            friendly = name_map.get(sess_id) or name_map.get(item["base"]) or sess_id
+            is_nomem = item.get("is_nomem", False)
+            default_name = (f"No-Memory ({datetime.fromtimestamp(item['timestamp']).strftime('%b %d, %H:%M')})" if item.get('timestamp') else sess_id) if is_nomem else sess_id
+            friendly = name_map.get(sess_id) or name_map.get(item["base"]) or default_name
             results.append({
                 "path": item["path"],
                 "name": friendly,
-                "id": sess_id
+                "id": sess_id,
+                "is_nomem": is_nomem
             })
 
         self.send_to_electron({"type": "sessions_list_data", "sessions": results})
@@ -1509,8 +1516,13 @@ class HeadlessAgentView:
             with open(filepath, "r", encoding="utf-8") as f: data = json.load(f)
             base = os.path.basename(filepath).replace(".json", "")
             parts = base.split("_")
-            sess_id = f"{parts[0]}_{parts[1]}" if len(parts) >= 2 else base
-            owner_raw = "_".join(parts[2:]) if len(parts) >= 3 else parts[-1]
+            is_nomem = "_nomem_" in base
+            if len(parts) >= 3 and parts[1] == "nomem":
+                sess_id = f"{parts[0]}_{parts[1]}_{parts[2]}"
+                owner_raw = "_".join(parts[3:]) if len(parts) >= 4 else parts[-1]
+            else:
+                sess_id = f"{parts[0]}_{parts[1]}" if len(parts) >= 2 else base
+                owner_raw = "_".join(parts[2:]) if len(parts) >= 3 else parts[-1]
             matched_owner = self.agent_manager.get_agent(owner_raw) or self.agent_manager.get_agent(owner_raw.replace("_", " "))
             owner = matched_owner.name if matched_owner else owner_raw
 
@@ -1527,8 +1539,9 @@ class HeadlessAgentView:
             u_name = user_cfg.get("user_name", "User")
             u_color = user_cfg.get("user_color", "#dda0dd")
 
-            self.send_to_electron({"type": "clear_chat"})
-            self.log_to_ui(f"[bold green]Restored Session: {sess_id} (agent: {owner})[/bold green]")
+            self.send_to_electron({"type": "clear_chat", "is_nomem": is_nomem})
+            status_text = f"Restored {'NO-MEMORY ' if is_nomem else ''}Session: {sess_id} (agent: {owner})"
+            self.log_to_ui(f"[bold green]{status_text}[/bold green]")
 
             for msg in data:
                 if not isinstance(msg, dict): continue
